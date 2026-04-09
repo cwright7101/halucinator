@@ -13,5 +13,6 @@ test/**/tmp
 *.vscode
 *.elf
 *.elf.bin
+!demo/**/*.elf
 *.map
 deps/build-qemu/
