@@ -2,13 +2,6 @@
 set -e
 set -x
 
-# Clean up any leftover processes from previous tests
-pkill -9 -f qemu-system-arm 2>/dev/null || true
-pkill -9 -f halucinator 2>/dev/null || true
-pkill -9 -f hal_dev_uart 2>/dev/null || true
-pkill -9 -f gdb-multiarch 2>/dev/null || true
-sleep 2
-
 # Move into the folder where this script is regardless of where it's run from
 SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 cd "$SCRIPT_DIR"

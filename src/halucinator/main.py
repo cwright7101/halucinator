@@ -8,7 +8,6 @@ from __future__ import annotations
 
 from argparse import ArgumentParser
 import logging
-from multiprocessing import Lock
 import threading
 import os
 import sys
@@ -16,15 +15,7 @@ import argparse
 import signal
 from typing import Any, List, Optional, Tuple, Union
 
-from avatar2 import (
-    ARM,
-    ARM64,
-    ARM_CORTEX_M3,
-    MIPS32,
-    PPC32,
-    PPC64,
-    Avatar,
-)
+from avatar2 import Avatar
 from avatar2.peripherals.avatar_peripheral import AvatarPeripheral
 from .peripheral_models import generic as peripheral_emulators
 
@@ -34,14 +25,6 @@ from .debug_shell import DebugShell
 from .peripheral_models import peripheral_server as periph_server
 from .util.profile_hals import State_Recorder
 from .util import cortex_m_helpers as CM_helpers
-from .qemu_targets import (
-    ARMQemuTarget,
-    ARM64QemuTarget,
-    ARMv7mQemuTarget,
-    MIPSQemuTarget,
-    PowerPCQemuTarget,
-    PowerPC64QemuTarget,
-)
 from . import hal_stats
 from . import hal_log, hal_config
 
@@ -52,73 +35,6 @@ hal_log.setLogConfig()
 
 PATCH_MEMORY_SIZE = 4096
 INTERCEPT_RETURN_INSTR_ADDR = 0x20000000 - PATCH_MEMORY_SIZE
-__HAL_EXIT_CODE = 0
-
-QEMU_SYS_LUT = {
-    ARM: {"qemu": "qemu-system-arm", "suffix": "ARM",},
-    ARM64: {"qemu": "qemu-system-aarch64", "suffix": "ARM64",},
-    ARM_CORTEX_M3: {"qemu": "qemu-system-arm", "suffix": "ARM",},
-    MIPS32: {"qemu": "qemu-system-mips", "suffix": "MIPS32",},
-    PPC32: {"qemu": "qemu-system-ppc", "suffix": "PPC",},
-    PPC64: {"qemu": "qemu-system-ppc64", "suffix": "PPC64",},
-}
-
-ARCH_LUT = {
-    "arm": ARM,
-    "arm64": ARM64,
-    "cortex-m3": ARM_CORTEX_M3,
-    "mips": MIPS32,
-    "ppc": PPC32,
-    "ppc64": PPC64,
-}
-
-QEMU_ARCH_LUT = {
-    "arm": ARMQemuTarget,
-    "arm64": ARM64QemuTarget,
-    "cortex-m3": ARMv7mQemuTarget,
-    "mips": MIPSQemuTarget,
-    "ppc": PowerPCQemuTarget,
-    "ppc64": PowerPC64QemuTarget,
-}
-
-
-def find_qemu(arch: Any) -> str:
-    """
-    Tries to find a valid Avatar-QEMU build to use for emulation
-    Will use Environment Variable "HALUCINATOR_QEMU_${arch}" as first choice
-    then fall back to
-    /avatar/avatar2/targets/src/avatar-qemu/build/qemu-system-${arch}
-    """
-    qemu_target: Optional[str] = None
-    if arch in QEMU_SYS_LUT:
-        arch_info = QEMU_SYS_LUT[arch]
-        qemu_exe = str(arch_info["qemu"])
-        default_path = os.path.join(
-            "/avatar/avatar2/targets/src/avatar-qemu/build/", qemu_exe
-        )
-        env_var = "HALUCINATOR_QEMU_" + str(arch_info["suffix"])
-
-        if os.environ.get(env_var):
-            qemu_target = os.environ.get(env_var)
-            if qemu_target is not None and not os.path.exists(qemu_target):
-                # make sure the target exists, otherwise reset it to None
-                qemu_target = None
-
-        if qemu_target is None:
-            qemu_target = default_path
-
-        if qemu_target is not None:
-            return str(qemu_target)
-
-        log.error(
-            f"QEMU NOT FOUND.\n Set environment variable (${env_var}) for your architecture ${arch} "
-            "to full path of avatar-qemu binary. "
-        )
-
-    else:
-        log.error(f"{arch} is not supported!!!")
-
-    exit(1)
 
 
 def get_qemu_target(
@@ -134,57 +50,22 @@ def get_qemu_target(
     """
 
     # Get info from config
-    arch = ARCH_LUT[config.machine.arch]
+    avatar_arch = config.machine.get_avatar_arch()
 
-    qemu_path = find_qemu(arch)
+    qemu_path = config.machine.get_qemu_path()
     outdir = os.path.join("tmp", name)
     hal_stats.set_filename(outdir + "/stats.yaml")
 
-    avatar = Avatar(arch=arch, output_directory=outdir)
+    avatar = Avatar(arch=avatar_arch, output_directory=outdir)
     avatar.config = config
+    avatar.cpu_model = config.machine.cpu_model
     log.info("GDB_PORT: %s", gdb_port)
     log.info("QEMU Path: %s", qemu_path)
 
-    additional_args = []
-    if qemu_args is not None:
-        additional_args.extend(qemu_args.split())
-
-    qemu_log_dir = os.path.join(outdir, "logs")
-    os.makedirs(qemu_log_dir, exist_ok=True)
-    if log_basic_blocks:
-        additional_args = [
-            "-d",
-            "in_asm",
-            "-D",
-            os.path.join(qemu_log_dir, "qemu_asm.log"),
-        ]
-
-        if log_basic_blocks == "irq":
-            additional_args[
-                1
-            ] = "in_asm,exec,int,cpu,guest_errors,avatar,trace:nvic*"
-
-        elif log_basic_blocks == "regs":
-            additional_args[1] = "in_asm,exec,cpu"
-
-        elif log_basic_blocks == "regs-nochain":
-            additional_args[1] = "in_asm,exec,cpu,nochain"
-
-        elif log_basic_blocks == "exec":
-            additional_args[1] = "exec"
-
-        elif log_basic_blocks == "trace-nochain":
-            additional_args[1] = "in_asm,exec,nochain"
-
-        elif log_basic_blocks == "trace":
-            additional_args[1] = "in_asm,exec"
-
-        elif log_basic_blocks == "coverage":
-            additional_args[1] = "in_asm"
-
-    qemu_target = QEMU_ARCH_LUT[config.machine.arch]
+    qemu_target = config.machine.get_qemu_target()
     qemu = avatar.add_target(
         qemu_target,
+        machine=config.machine.machine,
         cpu_model=config.machine.cpu_model,
         gdb_executable=config.machine.gdb_exe,
         gdb_port=gdb_port,
@@ -193,8 +74,52 @@ def get_qemu_target(
         executable=qemu_path,
         entry_address=config.machine.entry_addr,
         name=name,
-        additional_args=additional_args,
+        qmp_unix_socket=f"/tmp/{name}-qmp",
     )
+
+    qemu_log_dir = os.path.join(outdir, "logs")
+    os.makedirs(qemu_log_dir, exist_ok=True)
+
+    if log_basic_blocks == "irq":
+        qemu.additional_args = [
+            "-d", "in_asm,exec,int,cpu,guest_errors,avatar,trace:nvic*",
+            "-D", os.path.join(qemu_log_dir, "qemu_asm.log"),
+        ]
+    elif log_basic_blocks == "regs":
+        qemu.additional_args = [
+            "-d", "in_asm,exec,cpu",
+            "-D", os.path.join(qemu_log_dir, "qemu_asm.log"),
+        ]
+    elif log_basic_blocks == "regs-nochain":
+        qemu.additional_args = [
+            "-d", "in_asm,exec,cpu,nochain",
+            "-D", os.path.join(qemu_log_dir, "qemu_asm.log"),
+        ]
+    elif log_basic_blocks == "exec":
+        qemu.additional_args = [
+            "-d", "exec",
+            "-D", os.path.join(qemu_log_dir, "qemu_asm.log"),
+        ]
+    elif log_basic_blocks == "trace-nochain":
+        qemu.additional_args = [
+            "-d", "in_asm,exec,nochain",
+            "-D", os.path.join(qemu_log_dir, "qemu_asm.log"),
+        ]
+    elif log_basic_blocks == "trace":
+        qemu.additional_args = [
+            "-d", "in_asm,exec",
+            "-D", os.path.join(qemu_log_dir, "qemu_asm.log"),
+        ]
+    elif log_basic_blocks == "coverage":
+        qemu.additional_args = [
+            "-d", "in_asm",
+            "-D", os.path.join(qemu_log_dir, "qemu_asm.log"),
+        ]
+
+    if qemu_args is not None:
+        if not hasattr(qemu, 'additional_args') or qemu.additional_args is None:
+            qemu.additional_args = []
+        qemu.additional_args.extend(qemu_args.split())
 
     return avatar, qemu
 
@@ -228,6 +153,9 @@ def setup_memory(
         file=memory.file,
         permissions=memory.permissions,
         emulate=emulate,
+        qemu_name=memory.qemu_name,
+        irq=memory.irq_config,
+        qemu_properties=memory.properties,
     )
 
     if record_memories is not None:
@@ -334,8 +262,6 @@ def emulate_binary(
     gdb_port: int = 1234,
     elf_file: None = None,
     db_name: None = None,
-    debug: bool = False,
-    dap_port: Optional[int] = None,
     qemu_args: str = None,
 ) -> None:
     """
@@ -390,45 +316,13 @@ def emulate_binary(
     else:
         avatar.recorder = None
 
-    added_classes = []
-    for intercept in config.intercepts:
-        bp_cls = intercepts.get_bp_handler(intercept)
-        if issubclass(bp_cls.__class__, AvatarPeripheral):
-            name, addr, size, per = bp_cls.get_mmio_info()
-            if bp_cls not in added_classes:
-                log.info(
-                    "Adding Memory Region for %s, (Name: %s, Addr: %s, Size:%s)",
-                    bp_cls.__class__.__name__,
-                    name,
-                    hex(addr),
-                    hex(size),
-                )
-                avatar.add_memory_range(
-                    addr,
-                    size,
-                    name=name,
-                    permissions=per,
-                    forwarded=True,
-                    forwarded_to=bp_cls,
-                )
-                added_classes.append(bp_cls)
-    # Setup Intecepts
-    avatar.watchmen.add_watchman(
-        "BreakpointHit", "before", intercepts.interceptor, is_async=True
-    )
-    avatar.watchmen.add_watchman(
-        "WatchpointHit", "before", intercepts.interceptor, is_async=True
-    )
-
     qemu.gdb_port = gdb_port
     avatar.config = config
     log.info("Initializing Avatar Targets")
     avatar.init_targets()
 
-    for intercept in config.intercepts:
-        if intercept.bp_addr is not None:
-            log.info("Registering Intercept: %s", intercept)
-            intercepts.register_bp_handler(qemu, intercept)
+    register_intercepts(config, avatar, qemu)
+    config.initialize_target(qemu)
 
     # Work around Avatar-QEMU's improper init of Cortex-M3
     if config.machine.arch == "cortex-m3":
@@ -545,7 +439,6 @@ def main(cli_args: List[str] = None) -> None:
         args.tx_port,
         elf_file=args.elf,
         gdb_port=args.gdb_port,
-        debug=args.debug,
         qemu_args=qemu_args,
     )
 

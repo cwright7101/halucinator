@@ -16,6 +16,8 @@ def main(args):
 
     filenames = next(os.walk(site.USER_SITE), (None, None, []))[2]
     for filename in filenames:
+        if not filename.endswith(".pth"):
+            continue
         with open(os.path.join(site.USER_SITE, filename), "r") as f:
             lines = f.readlines()
         for line in lines:
