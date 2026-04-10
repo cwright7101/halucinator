@@ -159,7 +159,6 @@ jobs:
         done
 
     - name: run multi-arch e2e tests (PPC, PPC64)
-      continue-on-error: true  # Requires avatar-qemu PPC fixes (pending PR)
       run: |
         set -e
         set -x

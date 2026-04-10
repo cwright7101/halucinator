@@ -15,7 +15,7 @@ do
     pushd deps/
     mkdir -p build-qemu/"$target"
     cd build-qemu/"$target"
-    ../../avatar-qemu/configure --target-list=$target
+    ../../avatar-qemu/configure --target-list=$target --extra-cflags="-Wno-error"
     make all -j`nproc`
     popd
 done

@@ -151,7 +151,7 @@ class TestLIBOPENCM3_GPIO:
         continue_, ret_val = gpio.write_pins(qemu, None)
         assert continue_
         assert ret_val == 0
-        gpio.model.write_pin.called_once_with(hex(port) + "_" + str(pin), 1)
+        gpio.model.write_pin.assert_called_once_with(hex(port) + "_" + str(pin), 1)
 
     @pytest.mark.parametrize("port", [16, 32])
     @pytest.mark.parametrize(
