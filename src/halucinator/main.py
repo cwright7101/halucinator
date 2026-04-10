@@ -204,10 +204,11 @@ def fix_cortex_m_thumb_bit(config: Any) -> None:
             else config.memories["flash"]
         )
         if mem is not None and mem.file is not None:
-            config.machine.init_sp, entry_addr = CM_helpers.get_sp_and_entry(mem.file)
-        # Only use the discoved entry point if one not explicitly set
-        if config.machine.entry_addr is None:
-            config.machine.entry_addr = entry_addr
+            file_sp, file_entry = CM_helpers.get_sp_and_entry(mem.file)
+            if config.machine.init_sp is None:
+                config.machine.init_sp = file_sp
+            if config.machine.entry_addr is None:
+                config.machine.entry_addr = file_entry
 
 
 def register_intercepts(config: Any, avatar: Avatar, qemu: Any) -> None:
@@ -277,12 +278,12 @@ def emulate_binary(
             else config.memories["flash"]
         )
         if mem is not None and mem.file is not None:
-            config.machine.init_sp, entry_addr = CM_helpers.get_sp_and_entry(
-                mem.file
-            )
-        # Only use the discoved entry point if one not explicitly set
-        if config.machine.entry_addr is None:
-            config.machine.entry_addr = entry_addr
+            file_sp, file_entry = CM_helpers.get_sp_and_entry(mem.file)
+            # Only use discovered values if not explicitly set in config
+            if config.machine.init_sp is None:
+                config.machine.init_sp = file_sp
+            if config.machine.entry_addr is None:
+                config.machine.entry_addr = file_entry
 
     qemu_target_name = target_name if target_name else "halucinator"
     avatar, qemu = get_qemu_target(
@@ -324,10 +325,13 @@ def emulate_binary(
     register_intercepts(config, avatar, qemu)
     config.initialize_target(qemu)
 
-    # Work around Avatar-QEMU's improper init of Cortex-M3
+    # Set initial stack pointer if configured
+    if config.machine.init_sp is not None:
+        qemu.regs.sp = config.machine.init_sp
+
+    # Cortex-M3 specific init
     if config.machine.arch == "cortex-m3":
         qemu.regs.cpsr |= 0x20  # Make sure the thumb bit is set
-        qemu.regs.sp = config.machine.init_sp  # Set SP as Qemu doesn't init correctly
         qemu.set_vector_table_base(config.machine.vector_base)
 
     # Emulate the Binary

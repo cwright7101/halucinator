@@ -1,0 +1,4003 @@
+Build started at 2026-04-10T14:08:39.994609
+Main binary: /usr/bin/python3
+Build Options: -Daudio_drv_list=default -Ddefault_devices=true -Ddocdir=/usr/local/share/doc -Dqemu_firmwarepath=/usr/local/share/qemu-firmware -Dqemu_suffix=qemu -Dsphinx_build= -Dtrace_file=trace -Doptimization=2 -Ddebug=true -Dwerror=true -Dstrip=true -Db_pie=true -Db_coverage=false -Db_lto=false -Dcfi=false -Dtcg=enabled -Dxen=enabled -Dcapstone=auto -Dfdt=auto -Dslirp=auto -Dprefix=/usr/local -Dbindir=/usr/local/bin -Ddatadir=/usr/local/share -Dincludedir=/usr/local/include -Dlibdir=/usr/local/lib -Dlibexecdir=/usr/local/libexec -Dlocaledir=/usr/local/share/locale -Dlocalstatedir=/usr/local/var -Dmandir=/usr/local/share/man -Dsysconfdir=/usr/local/etc --native-file=config-meson.cross
+Python system: Linux
+The Meson build system
+Version: 1.3.2
+Source dir: /data/dev/emulation/halucinator/deps/avatar-qemu
+Build dir: /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu
+Build type: native build
+Project name: qemu
+Project version: 6.2.0
+-----------
+Detecting compiler via: `cc -m64 -mcx16 --version` -> 0
+stdout:
+cc (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0
+Copyright (C) 2023 Free Software Foundation, Inc.
+This is free software; see the source for copying conditions.  There is NO
+warranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+-----------
+Running command: cc -m64 -mcx16 -E -dM -
+-----
+-----------
+Detecting linker via: `cc -m64 -mcx16 -Wl,--version -Wno-error` -> 0
+stdout:
+GNU ld (GNU Binutils for Ubuntu) 2.42
+Copyright (C) 2024 Free Software Foundation, Inc.
+This program is free software; you may redistribute it under the terms of
+the GNU General Public License version 3 or (at your option) a later version.
+This program has absolutely no warranty.
+-----------
+stderr:
+collect2 version 13.3.0
+/usr/bin/ld -plugin /usr/libexec/gcc/x86_64-linux-gnu/13/liblto_plugin.so -plugin-opt=/usr/libexec/gcc/x86_64-linux-gnu/13/lto-wrapper -plugin-opt=-fresolution=/tmp/ccf5v7oh.res -plugin-opt=-pass-through=-lgcc -plugin-opt=-pass-through=-lgcc_s -plugin-opt=-pass-through=-lc -plugin-opt=-pass-through=-lgcc -plugin-opt=-pass-through=-lgcc_s --build-id --eh-frame-hdr -m elf_x86_64 --hash-style=gnu --as-needed -dynamic-linker /lib64/ld-linux-x86-64.so.2 -pie -z now -z relro /usr/lib/gcc/x86_64-linux-gnu/13/../../../x86_64-linux-gnu/Scrt1.o /usr/lib/gcc/x86_64-linux-gnu/13/../../../x86_64-linux-gnu/crti.o /usr/lib/gcc/x86_64-linux-gnu/13/crtbeginS.o -L/usr/lib/gcc/x86_64-linux-gnu/13 -L/usr/lib/gcc/x86_64-linux-gnu/13/../../../x86_64-linux-gnu -L/usr/lib/gcc/x86_64-linux-gnu/13/../../../../lib -L/lib/x86_64-linux-gnu -L/lib/../lib -L/usr/lib/x86_64-linux-gnu -L/usr/lib/../lib -L/usr/lib/gcc/x86_64-linux-gnu/13/../../.. --version -lgcc --push-state --as-needed -lgcc_s --pop-state -lc -lgcc --push-state --as-needed -lgcc_s --pop-state /usr/lib/gcc/x86_64-linux-gnu/13/crtendS.o /usr/lib/gcc/x86_64-linux-gnu/13/../../../x86_64-linux-gnu/crtn.o
+-----------
+Sanity testing C compiler: cc -m64 -mcx16
+Is cross compiler: False.
+Sanity check compiler command line: cc -m64 -mcx16 sanitycheckc.c -o sanitycheckc.exe -Wno-error -D_FILE_OFFSET_BITS=64
+Sanity check compile stdout:
+
+-----
+Sanity check compile stderr:
+
+-----
+Running test binary command:  /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/sanitycheckc.exe
+C compiler for the host machine: cc -m64 -mcx16 (gcc 13.3.0 "cc (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0")
+C linker for the host machine: cc -m64 -mcx16 ld.bfd 2.42
+-----------
+Detecting archiver via: `ar --version` -> 0
+stdout:
+GNU ar (GNU Binutils for Ubuntu) 2.42
+Copyright (C) 2024 Free Software Foundation, Inc.
+This program is free software; you may redistribute it under the terms of
+the GNU General Public License version 3 or (at your option) any later version.
+This program has absolutely no warranty.
+-----------
+-----------
+Detecting compiler via: `cc -m64 -mcx16 --version` -> 0
+stdout:
+cc (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0
+Copyright (C) 2023 Free Software Foundation, Inc.
+This is free software; see the source for copying conditions.  There is NO
+warranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+-----------
+Running command: cc -m64 -mcx16 -E -dM -
+-----
+-----------
+Detecting linker via: `cc -m64 -mcx16 -Wl,--version` -> 0
+stdout:
+GNU ld (GNU Binutils for Ubuntu) 2.42
+Copyright (C) 2024 Free Software Foundation, Inc.
+This program is free software; you may redistribute it under the terms of
+the GNU General Public License version 3 or (at your option) a later version.
+This program has absolutely no warranty.
+-----------
+stderr:
+collect2 version 13.3.0
+/usr/bin/ld -plugin /usr/libexec/gcc/x86_64-linux-gnu/13/liblto_plugin.so -plugin-opt=/usr/libexec/gcc/x86_64-linux-gnu/13/lto-wrapper -plugin-opt=-fresolution=/tmp/cceb4yVu.res -plugin-opt=-pass-through=-lgcc -plugin-opt=-pass-through=-lgcc_s -plugin-opt=-pass-through=-lc -plugin-opt=-pass-through=-lgcc -plugin-opt=-pass-through=-lgcc_s --build-id --eh-frame-hdr -m elf_x86_64 --hash-style=gnu --as-needed -dynamic-linker /lib64/ld-linux-x86-64.so.2 -pie -z now -z relro /usr/lib/gcc/x86_64-linux-gnu/13/../../../x86_64-linux-gnu/Scrt1.o /usr/lib/gcc/x86_64-linux-gnu/13/../../../x86_64-linux-gnu/crti.o /usr/lib/gcc/x86_64-linux-gnu/13/crtbeginS.o -L/usr/lib/gcc/x86_64-linux-gnu/13 -L/usr/lib/gcc/x86_64-linux-gnu/13/../../../x86_64-linux-gnu -L/usr/lib/gcc/x86_64-linux-gnu/13/../../../../lib -L/lib/x86_64-linux-gnu -L/lib/../lib -L/usr/lib/x86_64-linux-gnu -L/usr/lib/../lib -L/usr/lib/gcc/x86_64-linux-gnu/13/../../.. --version -lgcc --push-state --as-needed -lgcc_s --pop-state -lc -lgcc --push-state --as-needed -lgcc_s --pop-state /usr/lib/gcc/x86_64-linux-gnu/13/crtendS.o /usr/lib/gcc/x86_64-linux-gnu/13/../../../x86_64-linux-gnu/crtn.o
+-----------
+Sanity testing C compiler: cc -m64 -mcx16
+Is cross compiler: False.
+Sanity check compiler command line: cc -m64 -mcx16 sanitycheckc.c -o sanitycheckc.exe -D_FILE_OFFSET_BITS=64
+Sanity check compile stdout:
+
+-----
+Sanity check compile stderr:
+
+-----
+Running test binary command:  /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/sanitycheckc.exe
+C compiler for the build machine: cc -m64 -mcx16 (gcc 13.3.0 "cc (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0")
+C linker for the build machine: cc -m64 -mcx16 ld.bfd 2.42
+-----------
+Detecting archiver via: `ar --version` -> 0
+stdout:
+GNU ar (GNU Binutils for Ubuntu) 2.42
+Copyright (C) 2024 Free Software Foundation, Inc.
+This program is free software; you may redistribute it under the terms of
+the GNU General Public License version 3 or (at your option) any later version.
+This program has absolutely no warranty.
+-----------
+Build machine cpu family: x86_64
+Build machine cpu: x86_64
+Host machine cpu family: x86_64
+Host machine cpu: x86_64
+Target machine cpu family: x86_64
+Target machine cpu: x86_64
+Program sh found: YES (/usr/bin/sh)
+Program python3 found: YES (/usr/bin/python3)
+-----------
+Detecting compiler via: `c++ -m64 -mcx16 --version` -> 0
+stdout:
+c++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0
+Copyright (C) 2023 Free Software Foundation, Inc.
+This is free software; see the source for copying conditions.  There is NO
+warranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+-----------
+Running command: c++ -m64 -mcx16 -E -dM -
+-----
+-----------
+Detecting linker via: `c++ -m64 -mcx16 -Wl,--version -Wno-error` -> 0
+stdout:
+GNU ld (GNU Binutils for Ubuntu) 2.42
+Copyright (C) 2024 Free Software Foundation, Inc.
+This program is free software; you may redistribute it under the terms of
+the GNU General Public License version 3 or (at your option) a later version.
+This program has absolutely no warranty.
+-----------
+stderr:
+collect2 version 13.3.0
+/usr/bin/ld -plugin /usr/libexec/gcc/x86_64-linux-gnu/13/liblto_plugin.so -plugin-opt=/usr/libexec/gcc/x86_64-linux-gnu/13/lto-wrapper -plugin-opt=-fresolution=/tmp/ccGteDmB.res -plugin-opt=-pass-through=-lgcc_s -plugin-opt=-pass-through=-lgcc -plugin-opt=-pass-through=-lc -plugin-opt=-pass-through=-lgcc_s -plugin-opt=-pass-through=-lgcc --build-id --eh-frame-hdr -m elf_x86_64 --hash-style=gnu --as-needed -dynamic-linker /lib64/ld-linux-x86-64.so.2 -pie -z now -z relro /usr/lib/gcc/x86_64-linux-gnu/13/../../../x86_64-linux-gnu/Scrt1.o /usr/lib/gcc/x86_64-linux-gnu/13/../../../x86_64-linux-gnu/crti.o /usr/lib/gcc/x86_64-linux-gnu/13/crtbeginS.o -L/usr/lib/gcc/x86_64-linux-gnu/13 -L/usr/lib/gcc/x86_64-linux-gnu/13/../../../x86_64-linux-gnu -L/usr/lib/gcc/x86_64-linux-gnu/13/../../../../lib -L/lib/x86_64-linux-gnu -L/lib/../lib -L/usr/lib/x86_64-linux-gnu -L/usr/lib/../lib -L/usr/lib/gcc/x86_64-linux-gnu/13/../../.. --version -lstdc++ -lm -lgcc_s -lgcc -lc -lgcc_s -lgcc /usr/lib/gcc/x86_64-linux-gnu/13/crtendS.o /usr/lib/gcc/x86_64-linux-gnu/13/../../../x86_64-linux-gnu/crtn.o
+-----------
+Sanity testing C++ compiler: c++ -m64 -mcx16
+Is cross compiler: False.
+Sanity check compiler command line: c++ -m64 -mcx16 sanitycheckcpp.cc -o sanitycheckcpp.exe -Wno-error -D_FILE_OFFSET_BITS=64
+Sanity check compile stdout:
+
+-----
+Sanity check compile stderr:
+
+-----
+Running test binary command:  /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/sanitycheckcpp.exe
+C++ compiler for the host machine: c++ -m64 -mcx16 (gcc 13.3.0 "c++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0")
+C++ linker for the host machine: c++ -m64 -mcx16 ld.bfd 2.42
+Program cgcc found: NO
+Running compile:
+Working directory:  /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmp29y_qh4a
+Code:
+ int main(void) { return 0; }
+
+-----------
+Command line: `cc -m64 -mcx16 /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmp29y_qh4a/testfile.c -o /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmp29y_qh4a/output.exe -Wno-error -D_FILE_OFFSET_BITS=64 -O0 -Wl,--start-group -lm -Wl,--end-group -Wl,--allow-shlib-undefined` -> 0
+Library m found: YES
+Run-time dependency threads found: YES
+Running compile:
+Working directory:  /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmp_b2p6opv
+Code:
+ int main(void) { return 0; }
+
+-----------
+Command line: `cc -m64 -mcx16 /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmp_b2p6opv/testfile.c -o /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmp_b2p6opv/output.exe -Wno-error -D_FILE_OFFSET_BITS=64 -O0 -Wl,--start-group -lutil -Wl,--end-group -Wl,--allow-shlib-undefined` -> 0
+Library util found: YES
+Running compile:
+Working directory:  /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpg2s8cj7s
+Code:
+ int main(void) { return 0; }
+-----------
+Command line: `c++ -m64 -mcx16 /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpg2s8cj7s/testfile.cpp -o /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpg2s8cj7s/output.exe -Wno-error -D_FILE_OFFSET_BITS=64 -O0 -fpermissive -framework Hypervisor` -> 1
+stderr:
+c++: error: unrecognized command-line option '-framework'
+-----------
+Run-time dependency appleframeworks found: NO (tried framework)
+Pkg-config binary for host machine specified from cross file, native file, or env var as ['pkg-config']
+Found pkg-config: YES (/usr/bin/pkg-config) 1.8.1
+Determining dependency 'pixman-1' with pkg-config executable '/usr/bin/pkg-config'
+env[PKG_CONFIG_PATH]: 
+env[PKG_CONFIG]: /usr/bin/pkg-config
+-----------
+Called: `/usr/bin/pkg-config --modversion pixman-1` -> 0
+stdout:
+0.42.2
+-----------
+env[PKG_CONFIG_PATH]: 
+env[PKG_CONFIG]: /usr/bin/pkg-config
+-----------
+Called: `/usr/bin/pkg-config --cflags pixman-1` -> 0
+stdout:
+-I/usr/include/pixman-1
+-----------
+env[PKG_CONFIG_ALLOW_SYSTEM_LIBS]: 1
+env[PKG_CONFIG_PATH]: 
+env[PKG_CONFIG]: /usr/bin/pkg-config
+-----------
+Called: `/usr/bin/pkg-config --libs pixman-1` -> 0
+stdout:
+-L/usr/lib/x86_64-linux-gnu -lpixman-1
+-----------
+env[PKG_CONFIG_PATH]: 
+env[PKG_CONFIG]: /usr/bin/pkg-config
+-----------
+Called: `/usr/bin/pkg-config --libs pixman-1` -> 0
+stdout:
+-lpixman-1
+-----------
+Running compile:
+Working directory:  /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpmcvkncfi
+Code:
+ 
+        #include<stddef.h>
+        #include<stdio.h>
+        int main(void) {
+            printf("%ld\n", (long)(sizeof(void *)));
+            return 0;
+        }
+-----------
+Command line: `c++ -m64 -mcx16 /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpmcvkncfi/testfile.cpp -o /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpmcvkncfi/output.exe -Wno-error -D_FILE_OFFSET_BITS=64 -O0 -fpermissive` -> 0
+Program stdout:
+
+8
+
+Program stderr:
+
+
+Running compile:
+Working directory:  /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpjq4gw_zw
+Code:
+ 
+-----------
+Command line: `c++ -m64 -mcx16 /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpjq4gw_zw/testfile.cpp -o /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpjq4gw_zw/output.obj -c -Wno-error -D_FILE_OFFSET_BITS=64 -O0 -fpermissive --print-search-dirs` -> 0
+stdout:
+install: /usr/lib/gcc/x86_64-linux-gnu/13/
+programs: =/usr/libexec/gcc/x86_64-linux-gnu/13/:/usr/libexec/gcc/x86_64-linux-gnu/13/:/usr/libexec/gcc/x86_64-linux-gnu/:/usr/lib/gcc/x86_64-linux-gnu/13/:/usr/lib/gcc/x86_64-linux-gnu/:/usr/lib/gcc/x86_64-linux-gnu/13/../../../../x86_64-linux-gnu/bin/x86_64-linux-gnu/13/:/usr/lib/gcc/x86_64-linux-gnu/13/../../../../x86_64-linux-gnu/bin/x86_64-linux-gnu/:/usr/lib/gcc/x86_64-linux-gnu/13/../../../../x86_64-linux-gnu/bin/
+libraries: =/usr/lib/gcc/x86_64-linux-gnu/13/:/usr/lib/gcc/x86_64-linux-gnu/13/../../../../x86_64-linux-gnu/lib/x86_64-linux-gnu/13/:/usr/lib/gcc/x86_64-linux-gnu/13/../../../../x86_64-linux-gnu/lib/x86_64-linux-gnu/:/usr/lib/gcc/x86_64-linux-gnu/13/../../../../x86_64-linux-gnu/lib/../lib/:/usr/lib/gcc/x86_64-linux-gnu/13/../../../x86_64-linux-gnu/13/:/usr/lib/gcc/x86_64-linux-gnu/13/../../../x86_64-linux-gnu/:/usr/lib/gcc/x86_64-linux-gnu/13/../../../../lib/:/lib/x86_64-linux-gnu/13/:/lib/x86_64-linux-gnu/:/lib/../lib/:/usr/lib/x86_64-linux-gnu/13/:/usr/lib/x86_64-linux-gnu/:/usr/lib/../lib/:/usr/lib/gcc/x86_64-linux-gnu/13/../../../../x86_64-linux-gnu/lib/:/usr/lib/gcc/x86_64-linux-gnu/13/../../../:/lib/:/usr/lib/
+-----------
+Run-time dependency pixman-1 found: YES 0.42.2
+Determining dependency 'zlib' with pkg-config executable '/usr/bin/pkg-config'
+env[PKG_CONFIG_PATH]: 
+env[PKG_CONFIG]: /usr/bin/pkg-config
+-----------
+Called: `/usr/bin/pkg-config --modversion zlib` -> 0
+stdout:
+1.3
+-----------
+env[PKG_CONFIG_PATH]: 
+env[PKG_CONFIG]: /usr/bin/pkg-config
+-----------
+Called: `/usr/bin/pkg-config --cflags zlib` -> 0
+env[PKG_CONFIG_ALLOW_SYSTEM_LIBS]: 1
+env[PKG_CONFIG_PATH]: 
+env[PKG_CONFIG]: /usr/bin/pkg-config
+-----------
+Called: `/usr/bin/pkg-config --libs zlib` -> 0
+stdout:
+-L/usr/lib/x86_64-linux-gnu -lz
+-----------
+env[PKG_CONFIG_PATH]: 
+env[PKG_CONFIG]: /usr/bin/pkg-config
+-----------
+Called: `/usr/bin/pkg-config --libs zlib` -> 0
+stdout:
+-lz
+-----------
+Run-time dependency zlib found: YES 1.3
+Running compile:
+Working directory:  /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmp4z4d3t2b
+Code:
+ 
+        #ifdef __has_include
+         #if !__has_include("libaio.h")
+          #error "Header 'libaio.h' could not be found"
+         #endif
+        #else
+         #include <libaio.h>
+        #endif
+-----------
+Command line: `cc -m64 -mcx16 /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmp4z4d3t2b/testfile.c -E -P -Wno-error -D_FILE_OFFSET_BITS=64 -P -O0 -std=gnu11` -> 0
+Has header "libaio.h" : YES 
+Running compile:
+Working directory:  /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpzbu5ie4q
+Code:
+ int main(void) { return 0; }
+
+-----------
+Command line: `cc -m64 -mcx16 /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpzbu5ie4q/testfile.c -o /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpzbu5ie4q/output.exe -Wno-error -D_FILE_OFFSET_BITS=64 -O0 -Wl,--start-group -laio -Wl,--end-group -Wl,--allow-shlib-undefined` -> 0
+Library aio found: YES
+Determining dependency 'liburing' with pkg-config executable '/usr/bin/pkg-config'
+env[PKG_CONFIG_PATH]: 
+env[PKG_CONFIG]: /usr/bin/pkg-config
+-----------
+Called: `/usr/bin/pkg-config --modversion liburing` -> 0
+stdout:
+2.5
+-----------
+env[PKG_CONFIG_PATH]: 
+env[PKG_CONFIG]: /usr/bin/pkg-config
+-----------
+Called: `/usr/bin/pkg-config --cflags liburing` -> 0
+env[PKG_CONFIG_ALLOW_SYSTEM_LIBS]: 1
+env[PKG_CONFIG_PATH]: 
+env[PKG_CONFIG]: /usr/bin/pkg-config
+-----------
+Called: `/usr/bin/pkg-config --libs liburing` -> 0
+stdout:
+-L/usr/lib/x86_64-linux-gnu -luring
+-----------
+env[PKG_CONFIG_PATH]: 
+env[PKG_CONFIG]: /usr/bin/pkg-config
+-----------
+Called: `/usr/bin/pkg-config --libs liburing` -> 0
+stdout:
+-luring
+-----------
+Run-time dependency liburing found: YES 2.5
+Determining dependency 'libxml-2.0' with pkg-config executable '/usr/bin/pkg-config'
+env[PKG_CONFIG_PATH]: 
+env[PKG_CONFIG]: /usr/bin/pkg-config
+-----------
+Called: `/usr/bin/pkg-config --modversion libxml-2.0` -> 1
+stderr:
+Package libxml-2.0 was not found in the pkg-config search path.
+Perhaps you should add the directory containing `libxml-2.0.pc'
+to the PKG_CONFIG_PATH environment variable
+Package 'libxml-2.0', required by 'virtual:world', not found
+-----------
+Run-time dependency libxml-2.0 found: NO (tried pkgconfig)
+Determining dependency 'libnfs' with pkg-config executable '/usr/bin/pkg-config'
+env[PKG_CONFIG_PATH]: 
+env[PKG_CONFIG]: /usr/bin/pkg-config
+-----------
+Called: `/usr/bin/pkg-config --modversion libnfs` -> 1
+stderr:
+Package libnfs was not found in the pkg-config search path.
+Perhaps you should add the directory containing `libnfs.pc'
+to the PKG_CONFIG_PATH environment variable
+Package 'libnfs', required by 'virtual:world', not found
+-----------
+Run-time dependency libnfs found: NO (tried pkgconfig)
+Running compile:
+Working directory:  /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmp5zua3tq5
+Code:
+ 
+  #include <stddef.h>
+  #include <sys/types.h>
+  #ifdef CONFIG_LIBATTR
+  #include <attr/xattr.h>
+  #else
+  #include <sys/xattr.h>
+  #endif
+  int main(void) { getxattr(NULL, NULL, NULL, 0); setxattr(NULL, NULL, NULL, 0, 0); return 0; }
+-----------
+Command line: `cc -m64 -mcx16 /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmp5zua3tq5/testfile.c -o /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmp5zua3tq5/output.exe -Wno-error -D_FILE_OFFSET_BITS=64 -O0 -std=gnu11` -> 0
+Running compile:
+Working directory:  /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmppjp1u3il
+Code:
+ int main(void) { return 0; }
+-----------
+Command line: `c++ -m64 -mcx16 /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmppjp1u3il/testfile.cpp -o /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmppjp1u3il/output.exe -Wno-error -D_FILE_OFFSET_BITS=64 -O0 -fpermissive -framework Cocoa` -> 1
+stderr:
+c++: error: unrecognized command-line option '-framework'
+-----------
+Run-time dependency appleframeworks found: NO (tried framework)
+Determining dependency 'libseccomp' with pkg-config executable '/usr/bin/pkg-config'
+env[PKG_CONFIG_PATH]: 
+env[PKG_CONFIG]: /usr/bin/pkg-config
+-----------
+Called: `/usr/bin/pkg-config --modversion libseccomp` -> 0
+stdout:
+2.5.5
+-----------
+env[PKG_CONFIG_PATH]: 
+env[PKG_CONFIG]: /usr/bin/pkg-config
+-----------
+Called: `/usr/bin/pkg-config --cflags libseccomp` -> 0
+env[PKG_CONFIG_ALLOW_SYSTEM_LIBS]: 1
+env[PKG_CONFIG_PATH]: 
+env[PKG_CONFIG]: /usr/bin/pkg-config
+-----------
+Called: `/usr/bin/pkg-config --libs libseccomp` -> 0
+stdout:
+-L/usr/lib/x86_64-linux-gnu -lseccomp
+-----------
+env[PKG_CONFIG_PATH]: 
+env[PKG_CONFIG]: /usr/bin/pkg-config
+-----------
+Called: `/usr/bin/pkg-config --libs libseccomp` -> 0
+stdout:
+-lseccomp
+-----------
+Run-time dependency libseccomp found: YES 2.5.5
+Running compile:
+Working directory:  /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpzcyoap0i
+Code:
+ 
+        #ifdef __has_include
+         #if !__has_include("cap-ng.h")
+          #error "Header 'cap-ng.h' could not be found"
+         #endif
+        #else
+         #include <cap-ng.h>
+        #endif
+-----------
+Command line: `cc -m64 -mcx16 /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpzcyoap0i/testfile.c -E -P -Wno-error -D_FILE_OFFSET_BITS=64 -P -O0 -std=gnu11` -> 0
+Has header "cap-ng.h" : YES 
+Running compile:
+Working directory:  /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpy8dn7442
+Code:
+ int main(void) { return 0; }
+
+-----------
+Command line: `cc -m64 -mcx16 /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpy8dn7442/testfile.c -o /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpy8dn7442/output.exe -Wno-error -D_FILE_OFFSET_BITS=64 -O0 -Wl,--start-group -lcap-ng -Wl,--end-group -Wl,--allow-shlib-undefined` -> 0
+Library cap-ng found: YES
+Running compile:
+Working directory:  /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpht21evg_
+Code:
+ 
+   #include <cap-ng.h>
+   int main(void)
+   {
+     capng_capability_to_name(CAPNG_EFFECTIVE);
+     return 0;
+   }
+-----------
+Command line: `cc -m64 -mcx16 /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpht21evg_/testfile.c -o /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpht21evg_/output.exe -Wno-error -D_FILE_OFFSET_BITS=64 -O0 -std=gnu11 -Wl,--start-group -lcap-ng -Wl,--end-group` -> 0
+Determining dependency 'xkbcommon' with pkg-config executable '/usr/bin/pkg-config'
+env[PKG_CONFIG_PATH]: 
+env[PKG_CONFIG]: /usr/bin/pkg-config
+-----------
+Called: `/usr/bin/pkg-config --modversion xkbcommon` -> 0
+stdout:
+1.6.0
+-----------
+env[PKG_CONFIG_PATH]: 
+env[PKG_CONFIG]: /usr/bin/pkg-config
+-----------
+Called: `/usr/bin/pkg-config --cflags xkbcommon` -> 0
+env[PKG_CONFIG_ALLOW_SYSTEM_LIBS]: 1
+env[PKG_CONFIG_PATH]: 
+env[PKG_CONFIG]: /usr/bin/pkg-config
+-----------
+Called: `/usr/bin/pkg-config --libs xkbcommon` -> 0
+stdout:
+-L/usr/lib/x86_64-linux-gnu -lxkbcommon
+-----------
+env[PKG_CONFIG_PATH]: 
+env[PKG_CONFIG]: /usr/bin/pkg-config
+-----------
+Called: `/usr/bin/pkg-config --libs xkbcommon` -> 0
+stdout:
+-lxkbcommon
+-----------
+Run-time dependency xkbcommon found: YES 1.6.0
+Running compile:
+Working directory:  /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpq7j7788j
+Code:
+ 
+        #ifdef __has_include
+         #if !__has_include("libvdeplug.h")
+          #error "Header 'libvdeplug.h' could not be found"
+         #endif
+        #else
+         #include <libvdeplug.h>
+        #endif
+-----------
+Command line: `cc -m64 -mcx16 /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpq7j7788j/testfile.c -E -P -Wno-error -D_FILE_OFFSET_BITS=64 -P -O0 -std=gnu11` -> 1
+stderr:
+/data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpq7j7788j/testfile.c:4:12: error: #error "Header 'libvdeplug.h' could not be found"
+    4 |           #error "Header 'libvdeplug.h' could not be found"
+      |            ^~~~~
+-----------
+Has header "libvdeplug.h" : NO 
+Determining dependency 'libpulse' with pkg-config executable '/usr/bin/pkg-config'
+env[PKG_CONFIG_PATH]: 
+env[PKG_CONFIG]: /usr/bin/pkg-config
+-----------
+Called: `/usr/bin/pkg-config --modversion libpulse` -> 0
+stdout:
+16.1
+-----------
+env[PKG_CONFIG_PATH]: 
+env[PKG_CONFIG]: /usr/bin/pkg-config
+-----------
+Called: `/usr/bin/pkg-config --cflags libpulse` -> 0
+stdout:
+-D_REENTRANT
+-----------
+env[PKG_CONFIG_ALLOW_SYSTEM_LIBS]: 1
+env[PKG_CONFIG_PATH]: 
+env[PKG_CONFIG]: /usr/bin/pkg-config
+-----------
+Called: `/usr/bin/pkg-config --libs libpulse` -> 0
+stdout:
+-L/usr/lib/x86_64-linux-gnu -lpulse -pthread
+-----------
+env[PKG_CONFIG_PATH]: 
+env[PKG_CONFIG]: /usr/bin/pkg-config
+-----------
+Called: `/usr/bin/pkg-config --libs libpulse` -> 0
+stdout:
+-lpulse -pthread
+-----------
+Run-time dependency libpulse found: YES 16.1
+Determining dependency 'alsa' with pkg-config executable '/usr/bin/pkg-config'
+env[PKG_CONFIG_PATH]: 
+env[PKG_CONFIG]: /usr/bin/pkg-config
+-----------
+Called: `/usr/bin/pkg-config --modversion alsa` -> 0
+stdout:
+1.2.11
+-----------
+env[PKG_CONFIG_PATH]: 
+env[PKG_CONFIG]: /usr/bin/pkg-config
+-----------
+Called: `/usr/bin/pkg-config --cflags alsa` -> 0
+env[PKG_CONFIG_ALLOW_SYSTEM_LIBS]: 1
+env[PKG_CONFIG_PATH]: 
+env[PKG_CONFIG]: /usr/bin/pkg-config
+-----------
+Called: `/usr/bin/pkg-config --libs alsa` -> 0
+stdout:
+-L/usr/lib/x86_64-linux-gnu -lasound
+-----------
+env[PKG_CONFIG_PATH]: 
+env[PKG_CONFIG]: /usr/bin/pkg-config
+-----------
+Called: `/usr/bin/pkg-config --libs alsa` -> 0
+stdout:
+-lasound
+-----------
+Run-time dependency alsa found: YES 1.2.11
+Determining dependency 'jack' with pkg-config executable '/usr/bin/pkg-config'
+env[PKG_CONFIG_PATH]: 
+env[PKG_CONFIG]: /usr/bin/pkg-config
+-----------
+Called: `/usr/bin/pkg-config --modversion jack` -> 0
+stdout:
+0.126.0
+-----------
+env[PKG_CONFIG_PATH]: 
+env[PKG_CONFIG]: /usr/bin/pkg-config
+-----------
+Called: `/usr/bin/pkg-config --cflags jack` -> 0
+env[PKG_CONFIG_ALLOW_SYSTEM_LIBS]: 1
+env[PKG_CONFIG_PATH]: 
+env[PKG_CONFIG]: /usr/bin/pkg-config
+-----------
+Called: `/usr/bin/pkg-config --libs jack` -> 0
+stdout:
+-L/usr/lib/x86_64-linux-gnu -ljack -lpthread
+-----------
+env[PKG_CONFIG_PATH]: 
+env[PKG_CONFIG]: /usr/bin/pkg-config
+-----------
+Called: `/usr/bin/pkg-config --libs jack` -> 0
+stdout:
+-ljack -lpthread
+-----------
+Running compile:
+Working directory:  /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpohcxxg3c
+Code:
+ int main(void) { return 0; }
+
+-----------
+Command line: `c++ -m64 -mcx16 /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpohcxxg3c/testfile.cpp -o /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpohcxxg3c/output.exe -Wno-error -D_FILE_OFFSET_BITS=64 -O0 -fpermissive -Wl,--start-group -lpthread -Wl,--end-group -Wl,--allow-shlib-undefined` -> 0
+Run-time dependency jack found: YES 0.126.0
+Determining dependency 'spice-protocol' with pkg-config executable '/usr/bin/pkg-config'
+env[PKG_CONFIG_PATH]: 
+env[PKG_CONFIG]: /usr/bin/pkg-config
+-----------
+Called: `/usr/bin/pkg-config --modversion spice-protocol` -> 0
+stdout:
+0.14.3
+-----------
+env[PKG_CONFIG_PATH]: 
+env[PKG_CONFIG]: /usr/bin/pkg-config
+-----------
+Called: `/usr/bin/pkg-config --cflags spice-protocol` -> 0
+stdout:
+-I/usr/include/spice-1
+-----------
+env[PKG_CONFIG_ALLOW_SYSTEM_LIBS]: 1
+env[PKG_CONFIG_PATH]: 
+env[PKG_CONFIG]: /usr/bin/pkg-config
+-----------
+Called: `/usr/bin/pkg-config --libs spice-protocol` -> 0
+env[PKG_CONFIG_PATH]: 
+env[PKG_CONFIG]: /usr/bin/pkg-config
+-----------
+Called: `/usr/bin/pkg-config --libs spice-protocol` -> 0
+Run-time dependency spice-protocol found: YES 0.14.3
+Determining dependency 'spice-server' with pkg-config executable '/usr/bin/pkg-config'
+env[PKG_CONFIG_PATH]: 
+env[PKG_CONFIG]: /usr/bin/pkg-config
+-----------
+Called: `/usr/bin/pkg-config --modversion spice-server` -> 0
+stdout:
+0.15.1
+-----------
+env[PKG_CONFIG_PATH]: 
+env[PKG_CONFIG]: /usr/bin/pkg-config
+-----------
+Called: `/usr/bin/pkg-config --cflags spice-server` -> 0
+stdout:
+-I/usr/include/spice-server -I/usr/include/spice-1
+-----------
+env[PKG_CONFIG_ALLOW_SYSTEM_LIBS]: 1
+env[PKG_CONFIG_PATH]: 
+env[PKG_CONFIG]: /usr/bin/pkg-config
+-----------
+Called: `/usr/bin/pkg-config --libs spice-server` -> 0
+stdout:
+-L/usr/lib/x86_64-linux-gnu -lspice-server
+-----------
+env[PKG_CONFIG_PATH]: 
+env[PKG_CONFIG]: /usr/bin/pkg-config
+-----------
+Called: `/usr/bin/pkg-config --libs spice-server` -> 0
+stdout:
+-lspice-server
+-----------
+Run-time dependency spice-server found: YES 0.15.1
+Running compile:
+Working directory:  /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpkkglt_x8
+Code:
+ int main(void) { return 0; }
+
+-----------
+Command line: `cc -m64 -mcx16 /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpkkglt_x8/testfile.c -o /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpkkglt_x8/output.exe -Wno-error -D_FILE_OFFSET_BITS=64 -O0 -Wl,--start-group -lrt -Wl,--end-group -Wl,--allow-shlib-undefined` -> 0
+Library rt found: YES
+Determining dependency 'libiscsi' with pkg-config executable '/usr/bin/pkg-config'
+env[PKG_CONFIG_PATH]: 
+env[PKG_CONFIG]: /usr/bin/pkg-config
+-----------
+Called: `/usr/bin/pkg-config --modversion libiscsi` -> 0
+stdout:
+1.19.0
+-----------
+env[PKG_CONFIG_PATH]: 
+env[PKG_CONFIG]: /usr/bin/pkg-config
+-----------
+Called: `/usr/bin/pkg-config --cflags libiscsi` -> 0
+env[PKG_CONFIG_ALLOW_SYSTEM_LIBS]: 1
+env[PKG_CONFIG_PATH]: 
+env[PKG_CONFIG]: /usr/bin/pkg-config
+-----------
+Called: `/usr/bin/pkg-config --libs libiscsi` -> 0
+stdout:
+-L/usr/lib/x86_64-linux-gnu -liscsi
+-----------
+env[PKG_CONFIG_PATH]: 
+env[PKG_CONFIG]: /usr/bin/pkg-config
+-----------
+Called: `/usr/bin/pkg-config --libs libiscsi` -> 0
+stdout:
+-liscsi
+-----------
+Run-time dependency libiscsi found: YES 1.19.0
+Determining dependency 'libzstd' with pkg-config executable '/usr/bin/pkg-config'
+env[PKG_CONFIG_PATH]: 
+env[PKG_CONFIG]: /usr/bin/pkg-config
+-----------
+Called: `/usr/bin/pkg-config --modversion libzstd` -> 0
+stdout:
+1.5.5
+-----------
+env[PKG_CONFIG_PATH]: 
+env[PKG_CONFIG]: /usr/bin/pkg-config
+-----------
+Called: `/usr/bin/pkg-config --cflags libzstd` -> 0
+env[PKG_CONFIG_ALLOW_SYSTEM_LIBS]: 1
+env[PKG_CONFIG_PATH]: 
+env[PKG_CONFIG]: /usr/bin/pkg-config
+-----------
+Called: `/usr/bin/pkg-config --libs libzstd` -> 0
+stdout:
+-L/usr/lib -lzstd
+-----------
+env[PKG_CONFIG_PATH]: 
+env[PKG_CONFIG]: /usr/bin/pkg-config
+-----------
+Called: `/usr/bin/pkg-config --libs libzstd` -> 0
+stdout:
+-lzstd
+-----------
+Run-time dependency libzstd found: YES 1.5.5
+Determining dependency 'virglrenderer' with pkg-config executable '/usr/bin/pkg-config'
+env[PKG_CONFIG_PATH]: 
+env[PKG_CONFIG]: /usr/bin/pkg-config
+-----------
+Called: `/usr/bin/pkg-config --modversion virglrenderer` -> 0
+stdout:
+1.0.0
+-----------
+env[PKG_CONFIG_PATH]: 
+env[PKG_CONFIG]: /usr/bin/pkg-config
+-----------
+Called: `/usr/bin/pkg-config --cflags virglrenderer` -> 0
+stdout:
+-I/usr/include/virgl
+-----------
+env[PKG_CONFIG_ALLOW_SYSTEM_LIBS]: 1
+env[PKG_CONFIG_PATH]: 
+env[PKG_CONFIG]: /usr/bin/pkg-config
+-----------
+Called: `/usr/bin/pkg-config --libs virglrenderer` -> 0
+stdout:
+-L/usr/lib/x86_64-linux-gnu -lvirglrenderer
+-----------
+env[PKG_CONFIG_PATH]: 
+env[PKG_CONFIG]: /usr/bin/pkg-config
+-----------
+Called: `/usr/bin/pkg-config --libs virglrenderer` -> 0
+stdout:
+-lvirglrenderer
+-----------
+Run-time dependency virglrenderer found: YES 1.0.0
+Determining dependency 'libcurl' with pkg-config executable '/usr/bin/pkg-config'
+env[PKG_CONFIG_PATH]: 
+env[PKG_CONFIG]: /usr/bin/pkg-config
+-----------
+Called: `/usr/bin/pkg-config --modversion libcurl` -> 0
+stdout:
+8.5.0
+-----------
+env[PKG_CONFIG_PATH]: 
+env[PKG_CONFIG]: /usr/bin/pkg-config
+-----------
+Called: `/usr/bin/pkg-config --cflags libcurl` -> 0
+stdout:
+-I/usr/include/x86_64-linux-gnu
+-----------
+env[PKG_CONFIG_ALLOW_SYSTEM_LIBS]: 1
+env[PKG_CONFIG_PATH]: 
+env[PKG_CONFIG]: /usr/bin/pkg-config
+-----------
+Called: `/usr/bin/pkg-config --libs libcurl` -> 0
+stdout:
+-L/usr/lib/x86_64-linux-gnu -lcurl
+-----------
+env[PKG_CONFIG_PATH]: 
+env[PKG_CONFIG]: /usr/bin/pkg-config
+-----------
+Called: `/usr/bin/pkg-config --libs libcurl` -> 0
+stdout:
+-lcurl
+-----------
+Run-time dependency libcurl found: YES 8.5.0
+Determining dependency 'libudev' with pkg-config executable '/usr/bin/pkg-config'
+env[PKG_CONFIG_PATH]: 
+env[PKG_CONFIG]: /usr/bin/pkg-config
+-----------
+Called: `/usr/bin/pkg-config --modversion libudev` -> 0
+stdout:
+255
+-----------
+env[PKG_CONFIG_PATH]: 
+env[PKG_CONFIG]: /usr/bin/pkg-config
+-----------
+Called: `/usr/bin/pkg-config --cflags libudev` -> 0
+env[PKG_CONFIG_ALLOW_SYSTEM_LIBS]: 1
+env[PKG_CONFIG_PATH]: 
+env[PKG_CONFIG]: /usr/bin/pkg-config
+-----------
+Called: `/usr/bin/pkg-config --libs libudev` -> 0
+stdout:
+-L/usr/lib/x86_64-linux-gnu -ludev
+-----------
+env[PKG_CONFIG_PATH]: 
+env[PKG_CONFIG]: /usr/bin/pkg-config
+-----------
+Called: `/usr/bin/pkg-config --libs libudev` -> 0
+stdout:
+-ludev
+-----------
+Run-time dependency libudev found: YES 255
+Running compile:
+Working directory:  /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmp0z4clqif
+Code:
+ int main(void) { return 0; }
+
+-----------
+Command line: `cc -m64 -mcx16 /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmp0z4clqif/testfile.c -o /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmp0z4clqif/output.exe -Wno-error -D_FILE_OFFSET_BITS=64 -O0 -Wl,--start-group -lmpathpersist -Wl,--end-group -Wl,--allow-shlib-undefined` -> 1
+stderr:
+/usr/bin/ld: cannot find -lmpathpersist: No such file or directory
+collect2: error: ld returned 1 exit status
+-----------
+Running compile:
+Working directory:  /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmp1q9_909q
+Code:
+ 
+        #include<stddef.h>
+        #include<stdio.h>
+        int main(void) {
+            printf("%ld\n", (long)(sizeof(void *)));
+            return 0;
+        }
+-----------
+Command line: `cc -m64 -mcx16 /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmp1q9_909q/testfile.c -o /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmp1q9_909q/output.exe -Wno-error -D_FILE_OFFSET_BITS=64 -O0` -> 0
+Program stdout:
+
+8
+
+Program stderr:
+
+
+Running compile:
+Working directory:  /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmp1imz88t4
+Code:
+ 
+-----------
+Command line: `cc -m64 -mcx16 /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmp1imz88t4/testfile.c -o /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmp1imz88t4/output.obj -c -Wno-error -D_FILE_OFFSET_BITS=64 -O0 --print-search-dirs` -> 0
+stdout:
+install: /usr/lib/gcc/x86_64-linux-gnu/13/
+programs: =/usr/libexec/gcc/x86_64-linux-gnu/13/:/usr/libexec/gcc/x86_64-linux-gnu/13/:/usr/libexec/gcc/x86_64-linux-gnu/:/usr/lib/gcc/x86_64-linux-gnu/13/:/usr/lib/gcc/x86_64-linux-gnu/:/usr/lib/gcc/x86_64-linux-gnu/13/../../../../x86_64-linux-gnu/bin/x86_64-linux-gnu/13/:/usr/lib/gcc/x86_64-linux-gnu/13/../../../../x86_64-linux-gnu/bin/x86_64-linux-gnu/:/usr/lib/gcc/x86_64-linux-gnu/13/../../../../x86_64-linux-gnu/bin/
+libraries: =/usr/lib/gcc/x86_64-linux-gnu/13/:/usr/lib/gcc/x86_64-linux-gnu/13/../../../../x86_64-linux-gnu/lib/x86_64-linux-gnu/13/:/usr/lib/gcc/x86_64-linux-gnu/13/../../../../x86_64-linux-gnu/lib/x86_64-linux-gnu/:/usr/lib/gcc/x86_64-linux-gnu/13/../../../../x86_64-linux-gnu/lib/../lib/:/usr/lib/gcc/x86_64-linux-gnu/13/../../../x86_64-linux-gnu/13/:/usr/lib/gcc/x86_64-linux-gnu/13/../../../x86_64-linux-gnu/:/usr/lib/gcc/x86_64-linux-gnu/13/../../../../lib/:/lib/x86_64-linux-gnu/13/:/lib/x86_64-linux-gnu/:/lib/../lib/:/usr/lib/x86_64-linux-gnu/13/:/usr/lib/x86_64-linux-gnu/:/usr/lib/../lib/:/usr/lib/gcc/x86_64-linux-gnu/13/../../../../x86_64-linux-gnu/lib/:/usr/lib/gcc/x86_64-linux-gnu/13/../../../:/lib/:/usr/lib/
+-----------
+Library mpathpersist found: NO
+Determining dependency 'ncursesw' with pkg-config executable '/usr/bin/pkg-config'
+env[PKG_CONFIG_PATH]: 
+env[PKG_CONFIG]: /usr/bin/pkg-config
+-----------
+Called: `/usr/bin/pkg-config --modversion ncursesw` -> 0
+stdout:
+6.4.20240113
+-----------
+env[PKG_CONFIG_PATH]: 
+env[PKG_CONFIG]: /usr/bin/pkg-config
+-----------
+Called: `/usr/bin/pkg-config --cflags ncursesw` -> 0
+stdout:
+-D_DEFAULT_SOURCE -D_XOPEN_SOURCE=600
+-----------
+env[PKG_CONFIG_ALLOW_SYSTEM_LIBS]: 1
+env[PKG_CONFIG_PATH]: 
+env[PKG_CONFIG]: /usr/bin/pkg-config
+-----------
+Called: `/usr/bin/pkg-config --libs ncursesw` -> 0
+stdout:
+-L/usr/lib/x86_64-linux-gnu -lncursesw -ltinfo
+-----------
+env[PKG_CONFIG_PATH]: 
+env[PKG_CONFIG]: /usr/bin/pkg-config
+-----------
+Called: `/usr/bin/pkg-config --libs ncursesw` -> 0
+stdout:
+-lncursesw -ltinfo
+-----------
+Run-time dependency ncursesw found: YES 6.4.20240113
+Running compile:
+Working directory:  /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpm7e2qrcg
+Code:
+ 
+    #if defined(__APPLE__) || defined(__OpenBSD__)
+    #define _XOPEN_SOURCE_EXTENDED 1
+    #endif
+    #include <locale.h>
+    #include <curses.h>
+    #include <wchar.h>
+    int main(void) {
+      wchar_t wch = L'w';
+      setlocale(LC_ALL, "");
+      resize_term(0, 0);
+      addwstr(L"wide chars\n");
+      addnwstr(&wch, 1);
+      add_wch(WACS_DEGREE);
+      return 0;
+    }
+-----------
+Command line: `cc -m64 -mcx16 /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpm7e2qrcg/testfile.c -o /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpm7e2qrcg/output.exe -D_DEFAULT_SOURCE -D_XOPEN_SOURCE=600 -Wno-error -D_FILE_OFFSET_BITS=64 -O0 -std=gnu11 -DNCURSES_WIDECHAR=1 -Wl,--start-group /usr/lib/x86_64-linux-gnu/libncursesw.so /usr/lib/x86_64-linux-gnu/libtinfo.so -Wl,--end-group` -> 0
+Running compile:
+Working directory:  /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpdzedy9m0
+Code:
+ 
+        #include <iconv.h>
+        int main(void) {
+          iconv_t conv = iconv_open("WCHAR_T", "UCS-2");
+          return conv != (iconv_t) -1;
+        }
+-----------
+Command line: `cc -m64 -mcx16 -I/usr/include/glib-2.0 -I/usr/lib/x86_64-linux-gnu/glib-2.0/include /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpdzedy9m0/testfile.c -o /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpdzedy9m0/output.exe -Wno-error -D_FILE_OFFSET_BITS=64 -O0 -std=gnu11 -pthread -Wl,--start-group -lgmodule-2.0 -lglib-2.0 -liconv -Wl,--end-group` -> 1
+stderr:
+/usr/bin/ld: cannot find -liconv: No such file or directory
+collect2: error: ld returned 1 exit status
+-----------
+Running compile:
+Working directory:  /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpfpr3qpbs
+Code:
+ 
+        #include <iconv.h>
+        int main(void) {
+          iconv_t conv = iconv_open("WCHAR_T", "UCS-2");
+          return conv != (iconv_t) -1;
+        }
+-----------
+Command line: `cc -m64 -mcx16 -I/usr/include/glib-2.0 -I/usr/lib/x86_64-linux-gnu/glib-2.0/include /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpfpr3qpbs/testfile.c -o /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpfpr3qpbs/output.exe -Wno-error -D_FILE_OFFSET_BITS=64 -O0 -std=gnu11 -pthread -Wl,--start-group -lgmodule-2.0 -lglib-2.0 -Wl,--end-group` -> 0
+Running compile:
+Working directory:  /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmp010jz_ri
+Code:
+ 
+        #ifdef __has_include
+         #if !__has_include("brlapi.h")
+          #error "Header 'brlapi.h' could not be found"
+         #endif
+        #else
+         #include <brlapi.h>
+        #endif
+-----------
+Command line: `cc -m64 -mcx16 /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmp010jz_ri/testfile.c -E -P -Wno-error -D_FILE_OFFSET_BITS=64 -P -O0 -std=gnu11` -> 0
+Has header "brlapi.h" : YES 
+Running compile:
+Working directory:  /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpqp79yllc
+Code:
+ int main(void) { return 0; }
+
+-----------
+Command line: `cc -m64 -mcx16 /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpqp79yllc/testfile.c -o /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpqp79yllc/output.exe -Wno-error -D_FILE_OFFSET_BITS=64 -O0 -Wl,--start-group -lbrlapi -Wl,--end-group -Wl,--allow-shlib-undefined` -> 0
+Library brlapi found: YES
+Running compile:
+Working directory:  /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpu64jae__
+Code:
+ 
+     #include <brlapi.h>
+     #include <stddef.h>
+     int main(void) { return brlapi__openConnection (NULL, NULL, NULL); }
+-----------
+Command line: `cc -m64 -mcx16 /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpu64jae__/testfile.c -o /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpu64jae__/output.exe -Wno-error -D_FILE_OFFSET_BITS=64 -O0 -std=gnu11 -Wl,--start-group -lbrlapi -Wl,--end-group` -> 0
+Determining dependency 'sdl2' with pkg-config executable '/usr/bin/pkg-config'
+env[PKG_CONFIG_PATH]: 
+env[PKG_CONFIG]: /usr/bin/pkg-config
+-----------
+Called: `/usr/bin/pkg-config --modversion sdl2` -> 0
+stdout:
+2.30.0
+-----------
+env[PKG_CONFIG_PATH]: 
+env[PKG_CONFIG]: /usr/bin/pkg-config
+-----------
+Called: `/usr/bin/pkg-config --cflags sdl2` -> 0
+stdout:
+-I/usr/include/SDL2 -D_REENTRANT
+-----------
+env[PKG_CONFIG_ALLOW_SYSTEM_LIBS]: 1
+env[PKG_CONFIG_PATH]: 
+env[PKG_CONFIG]: /usr/bin/pkg-config
+-----------
+Called: `/usr/bin/pkg-config --libs sdl2` -> 0
+stdout:
+-L/usr/lib/x86_64-linux-gnu -lSDL2
+-----------
+env[PKG_CONFIG_PATH]: 
+env[PKG_CONFIG]: /usr/bin/pkg-config
+-----------
+Called: `/usr/bin/pkg-config --libs sdl2` -> 0
+stdout:
+-lSDL2
+-----------
+Run-time dependency sdl2 found: YES 2.30.0
+Determining dependency 'SDL2_image' with pkg-config executable '/usr/bin/pkg-config'
+env[PKG_CONFIG_PATH]: 
+env[PKG_CONFIG]: /usr/bin/pkg-config
+-----------
+Called: `/usr/bin/pkg-config --modversion SDL2_image` -> 1
+stderr:
+Package SDL2_image was not found in the pkg-config search path.
+Perhaps you should add the directory containing `SDL2_image.pc'
+to the PKG_CONFIG_PATH environment variable
+Package 'SDL2_image', required by 'virtual:world', not found
+-----------
+Run-time dependency sdl2_image found: NO (tried pkgconfig)
+Running compile:
+Working directory:  /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmptci0d43i
+Code:
+ int main(void) { return 0; }
+
+-----------
+Command line: `cc -m64 -mcx16 /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmptci0d43i/testfile.c -o /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmptci0d43i/output.exe -Wno-error -D_FILE_OFFSET_BITS=64 -O0 -Wl,--start-group -lrados -Wl,--end-group -Wl,--allow-shlib-undefined` -> 0
+Library rados found: YES
+Running compile:
+Working directory:  /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmp6ofjjjt5
+Code:
+ 
+        #ifdef __has_include
+         #if !__has_include("rbd/librbd.h")
+          #error "Header 'rbd/librbd.h' could not be found"
+         #endif
+        #else
+         #include <rbd/librbd.h>
+        #endif
+-----------
+Command line: `cc -m64 -mcx16 /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmp6ofjjjt5/testfile.c -E -P -Wno-error -D_FILE_OFFSET_BITS=64 -P -O0 -std=gnu11` -> 0
+Has header "rbd/librbd.h" : YES 
+Running compile:
+Working directory:  /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpjyv8bgca
+Code:
+ int main(void) { return 0; }
+
+-----------
+Command line: `cc -m64 -mcx16 /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpjyv8bgca/testfile.c -o /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpjyv8bgca/output.exe -Wno-error -D_FILE_OFFSET_BITS=64 -O0 -Wl,--start-group -lrbd -Wl,--end-group -Wl,--allow-shlib-undefined` -> 0
+Library rbd found: YES
+Running compile:
+Working directory:  /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpmdyh2eso
+Code:
+ 
+      #include <stdio.h>
+      #include <rbd/librbd.h>
+      int main(void) {
+        rados_t cluster;
+        rados_create(&cluster, NULL);
+        #if LIBRBD_VERSION_CODE < LIBRBD_VERSION(1, 12, 0)
+        #error
+        #endif
+        return 0;
+      }
+-----------
+Command line: `cc -m64 -mcx16 /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpmdyh2eso/testfile.c -o /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpmdyh2eso/output.exe -Wno-error -D_FILE_OFFSET_BITS=64 -O0 -std=gnu11 -Wl,--start-group -lrbd -lrados -Wl,--end-group` -> 0
+Determining dependency 'glusterfs-api' with pkg-config executable '/usr/bin/pkg-config'
+env[PKG_CONFIG_PATH]: 
+env[PKG_CONFIG]: /usr/bin/pkg-config
+-----------
+Called: `/usr/bin/pkg-config --modversion glusterfs-api` -> 0
+stdout:
+7.11.1
+-----------
+env[PKG_CONFIG_PATH]: 
+env[PKG_CONFIG]: /usr/bin/pkg-config
+-----------
+Called: `/usr/bin/pkg-config --cflags glusterfs-api` -> 0
+stdout:
+-D_FILE_OFFSET_BITS=64 -D__USE_FILE_OFFSET64 -D__USE_LARGEFILE64 -DUSE_POSIX_ACLS=1 -I/usr/include/uuid
+-----------
+env[PKG_CONFIG_ALLOW_SYSTEM_LIBS]: 1
+env[PKG_CONFIG_PATH]: 
+env[PKG_CONFIG]: /usr/bin/pkg-config
+-----------
+Called: `/usr/bin/pkg-config --libs glusterfs-api` -> 0
+stdout:
+-L/usr/lib/x86_64-linux-gnu -lacl -lgfapi -lglusterfs -lgfrpc -lgfxdr -luuid
+-----------
+env[PKG_CONFIG_PATH]: 
+env[PKG_CONFIG]: /usr/bin/pkg-config
+-----------
+Called: `/usr/bin/pkg-config --libs glusterfs-api` -> 0
+stdout:
+-lacl -lgfapi -lglusterfs -lgfrpc -lgfxdr -luuid
+-----------
+Run-time dependency glusterfs-api found: YES 7.11.1
+Running compile:
+Working directory:  /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpkkjlaqf2
+Code:
+ 
+      #include <glusterfs/api/glfs.h>
+
+      int
+      main(void)
+      {
+          /* new glfs_ftruncate() passes two additional args */
+          return glfs_ftruncate(NULL, 0, NULL, NULL);
+      }
+    
+-----------
+Command line: `cc -m64 -mcx16 -I/usr/include/uuid /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpkkjlaqf2/testfile.c -o /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpkkjlaqf2/output.exe -D__USE_FILE_OFFSET64 -D__USE_LARGEFILE64 -DUSE_POSIX_ACLS=1 -Wno-error -D_FILE_OFFSET_BITS=64 -O0 -std=gnu11 -Wl,--start-group /usr/lib/x86_64-linux-gnu/libacl.so /usr/lib/x86_64-linux-gnu/libgfapi.so /usr/lib/x86_64-linux-gnu/libglusterfs.so /usr/lib/x86_64-linux-gnu/libgfrpc.so /usr/lib/x86_64-linux-gnu/libgfxdr.so /usr/lib/x86_64-linux-gnu/libuuid.so -Wl,--end-group` -> 0
+Running compile:
+Working directory:  /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpasgepl9a
+Code:
+ 
+      #include <glusterfs/api/glfs.h>
+
+      /* new glfs_io_cbk() passes two additional glfs_stat structs */
+      static void
+      glusterfs_iocb(glfs_fd_t *fd, ssize_t ret, struct glfs_stat *prestat, struct glfs_stat *poststat, void *data)
+      {}
+
+      int
+      main(void)
+      {
+          glfs_io_cbk iocb = &glusterfs_iocb;
+          iocb(NULL, 0 , NULL, NULL, NULL);
+          return 0;
+      }
+    
+-----------
+Command line: `cc -m64 -mcx16 -I/usr/include/uuid /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpasgepl9a/testfile.c -o /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpasgepl9a/output.exe -D__USE_FILE_OFFSET64 -D__USE_LARGEFILE64 -DUSE_POSIX_ACLS=1 -Wno-error -D_FILE_OFFSET_BITS=64 -O0 -std=gnu11 -Wl,--start-group /usr/lib/x86_64-linux-gnu/libacl.so /usr/lib/x86_64-linux-gnu/libgfapi.so /usr/lib/x86_64-linux-gnu/libglusterfs.so /usr/lib/x86_64-linux-gnu/libgfrpc.so /usr/lib/x86_64-linux-gnu/libgfxdr.so /usr/lib/x86_64-linux-gnu/libuuid.so -Wl,--end-group` -> 0
+Running compile:
+Working directory:  /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpq8hbt3km
+Code:
+ 
+        #ifdef __has_include
+         #if !__has_include("bzlib.h")
+          #error "Header 'bzlib.h' could not be found"
+         #endif
+        #else
+         #include <bzlib.h>
+        #endif
+-----------
+Command line: `cc -m64 -mcx16 /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpq8hbt3km/testfile.c -E -P -Wno-error -D_FILE_OFFSET_BITS=64 -P -O0 -std=gnu11` -> 0
+Has header "bzlib.h" : YES 
+Running compile:
+Working directory:  /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpl26jma0r
+Code:
+ int main(void) { return 0; }
+
+-----------
+Command line: `cc -m64 -mcx16 /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpl26jma0r/testfile.c -o /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpl26jma0r/output.exe -Wno-error -D_FILE_OFFSET_BITS=64 -O0 -Wl,--start-group -lbz2 -Wl,--end-group -Wl,--allow-shlib-undefined` -> 0
+Library bz2 found: YES
+Running compile:
+Working directory:  /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpk3htknpm
+Code:
+ 
+     #include <bzlib.h>
+     int main(void) { BZ2_bzlibVersion(); return 0; }
+-----------
+Command line: `cc -m64 -mcx16 /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpk3htknpm/testfile.c -o /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpk3htknpm/output.exe -Wno-error -D_FILE_OFFSET_BITS=64 -O0 -std=gnu11 -Wl,--start-group -lbz2 -Wl,--end-group` -> 0
+Running compile:
+Working directory:  /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmphkgje_i4
+Code:
+ 
+        #ifdef __has_include
+         #if !__has_include("lzfse.h")
+          #error "Header 'lzfse.h' could not be found"
+         #endif
+        #else
+         #include <lzfse.h>
+        #endif
+-----------
+Command line: `cc -m64 -mcx16 /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmphkgje_i4/testfile.c -E -P -Wno-error -D_FILE_OFFSET_BITS=64 -P -O0 -std=gnu11` -> 1
+stderr:
+/data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmphkgje_i4/testfile.c:4:12: error: #error "Header 'lzfse.h' could not be found"
+    4 |           #error "Header 'lzfse.h' could not be found"
+      |            ^~~~~
+-----------
+Has header "lzfse.h" : NO 
+Running compile:
+Working directory:  /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpf8tel6c2
+Code:
+ 
+        #ifdef __has_include
+         #if !__has_include("sys/soundcard.h")
+          #error "Header 'sys/soundcard.h' could not be found"
+         #endif
+        #else
+         #include <sys/soundcard.h>
+        #endif
+-----------
+Command line: `cc -m64 -mcx16 /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpf8tel6c2/testfile.c -E -P -Wno-error -D_FILE_OFFSET_BITS=64 -P -O0 -std=gnu11` -> 0
+Has header "sys/soundcard.h" : YES 
+Determining dependency 'gbm' with pkg-config executable '/usr/bin/pkg-config'
+env[PKG_CONFIG_PATH]: 
+env[PKG_CONFIG]: /usr/bin/pkg-config
+-----------
+Called: `/usr/bin/pkg-config --modversion gbm` -> 0
+stdout:
+25.2.8-0ubuntu0.24.04.1
+-----------
+env[PKG_CONFIG_PATH]: 
+env[PKG_CONFIG]: /usr/bin/pkg-config
+-----------
+Called: `/usr/bin/pkg-config --cflags gbm` -> 0
+env[PKG_CONFIG_ALLOW_SYSTEM_LIBS]: 1
+env[PKG_CONFIG_PATH]: 
+env[PKG_CONFIG]: /usr/bin/pkg-config
+-----------
+Called: `/usr/bin/pkg-config --libs gbm` -> 0
+stdout:
+-L/usr/lib/x86_64-linux-gnu -lgbm
+-----------
+env[PKG_CONFIG_PATH]: 
+env[PKG_CONFIG]: /usr/bin/pkg-config
+-----------
+Called: `/usr/bin/pkg-config --libs gbm` -> 0
+stdout:
+-lgbm
+-----------
+Run-time dependency gbm found: YES 25.2.8-0ubuntu0.24.04.1
+Determining dependency 'gnutls' with pkg-config executable '/usr/bin/pkg-config'
+env[PKG_CONFIG_PATH]: 
+env[PKG_CONFIG]: /usr/bin/pkg-config
+-----------
+Called: `/usr/bin/pkg-config --modversion gnutls` -> 0
+stdout:
+3.8.3
+-----------
+env[PKG_CONFIG_PATH]: 
+env[PKG_CONFIG]: /usr/bin/pkg-config
+-----------
+Called: `/usr/bin/pkg-config --cflags gnutls` -> 0
+stdout:
+-I/usr/include/p11-kit-1
+-----------
+env[PKG_CONFIG_ALLOW_SYSTEM_LIBS]: 1
+env[PKG_CONFIG_PATH]: 
+env[PKG_CONFIG]: /usr/bin/pkg-config
+-----------
+Called: `/usr/bin/pkg-config --libs gnutls` -> 0
+stdout:
+-L/usr/lib/x86_64-linux-gnu -lgnutls
+-----------
+env[PKG_CONFIG_PATH]: 
+env[PKG_CONFIG]: /usr/bin/pkg-config
+-----------
+Called: `/usr/bin/pkg-config --libs gnutls` -> 0
+stdout:
+-lgnutls
+-----------
+Run-time dependency gnutls found: YES 3.8.3
+Determining dependency 'gtk+-3.0' with pkg-config executable '/usr/bin/pkg-config'
+env[PKG_CONFIG_PATH]: 
+env[PKG_CONFIG]: /usr/bin/pkg-config
+-----------
+Called: `/usr/bin/pkg-config --modversion gtk+-3.0` -> 0
+stdout:
+3.24.41
+-----------
+env[PKG_CONFIG_PATH]: 
+env[PKG_CONFIG]: /usr/bin/pkg-config
+-----------
+Called: `/usr/bin/pkg-config --cflags gtk+-3.0` -> 0
+stdout:
+-I/usr/include/gtk-3.0 -I/usr/include/pango-1.0 -I/usr/include/glib-2.0 -I/usr/lib/x86_64-linux-gnu/glib-2.0/include -I/usr/include/harfbuzz -I/usr/include/freetype2 -I/usr/include/libpng16 -I/usr/include/libmount -I/usr/include/blkid -I/usr/include/fribidi -I/usr/include/cairo -I/usr/include/pixman-1 -I/usr/include/gdk-pixbuf-2.0 -I/usr/include/x86_64-linux-gnu -I/usr/include/webp -I/usr/include/gio-unix-2.0 -I/usr/include/atk-1.0 -I/usr/include/at-spi2-atk/2.0 -I/usr/include/at-spi-2.0 -I/usr/include/dbus-1.0 -I/usr/lib/x86_64-linux-gnu/dbus-1.0/include -pthread
+-----------
+env[PKG_CONFIG_ALLOW_SYSTEM_LIBS]: 1
+env[PKG_CONFIG_PATH]: 
+env[PKG_CONFIG]: /usr/bin/pkg-config
+-----------
+Called: `/usr/bin/pkg-config --libs gtk+-3.0` -> 0
+stdout:
+-L/usr/lib/x86_64-linux-gnu -lgtk-3 -lgdk-3 -lz -lpangocairo-1.0 -lpango-1.0 -lharfbuzz -latk-1.0 -lcairo-gobject -lcairo -lgdk_pixbuf-2.0 -lgio-2.0 -lgobject-2.0 -lglib-2.0
+-----------
+env[PKG_CONFIG_PATH]: 
+env[PKG_CONFIG]: /usr/bin/pkg-config
+-----------
+Called: `/usr/bin/pkg-config --libs gtk+-3.0` -> 0
+stdout:
+-lgtk-3 -lgdk-3 -lz -lpangocairo-1.0 -lpango-1.0 -lharfbuzz -latk-1.0 -lcairo-gobject -lcairo -lgdk_pixbuf-2.0 -lgio-2.0 -lgobject-2.0 -lglib-2.0
+-----------
+Run-time dependency gtk+-3.0 found: YES 3.24.41
+Determining dependency 'gtk+-x11-3.0' with pkg-config executable '/usr/bin/pkg-config'
+env[PKG_CONFIG_PATH]: 
+env[PKG_CONFIG]: /usr/bin/pkg-config
+-----------
+Called: `/usr/bin/pkg-config --modversion gtk+-x11-3.0` -> 0
+stdout:
+3.24.41
+-----------
+env[PKG_CONFIG_PATH]: 
+env[PKG_CONFIG]: /usr/bin/pkg-config
+-----------
+Called: `/usr/bin/pkg-config --cflags gtk+-x11-3.0` -> 0
+stdout:
+-I/usr/include/gtk-3.0 -I/usr/include/pango-1.0 -I/usr/include/glib-2.0 -I/usr/lib/x86_64-linux-gnu/glib-2.0/include -I/usr/include/harfbuzz -I/usr/include/freetype2 -I/usr/include/libpng16 -I/usr/include/libmount -I/usr/include/blkid -I/usr/include/fribidi -I/usr/include/cairo -I/usr/include/pixman-1 -I/usr/include/gdk-pixbuf-2.0 -I/usr/include/x86_64-linux-gnu -I/usr/include/webp -I/usr/include/gio-unix-2.0 -I/usr/include/atk-1.0 -I/usr/include/at-spi2-atk/2.0 -I/usr/include/at-spi-2.0 -I/usr/include/dbus-1.0 -I/usr/lib/x86_64-linux-gnu/dbus-1.0/include -pthread
+-----------
+env[PKG_CONFIG_ALLOW_SYSTEM_LIBS]: 1
+env[PKG_CONFIG_PATH]: 
+env[PKG_CONFIG]: /usr/bin/pkg-config
+-----------
+Called: `/usr/bin/pkg-config --libs gtk+-x11-3.0` -> 0
+stdout:
+-L/usr/lib/x86_64-linux-gnu -lgtk-3 -lgdk-3 -lz -lpangocairo-1.0 -lpango-1.0 -lharfbuzz -latk-1.0 -lcairo-gobject -lcairo -lgdk_pixbuf-2.0 -lgio-2.0 -lgobject-2.0 -lglib-2.0
+-----------
+env[PKG_CONFIG_PATH]: 
+env[PKG_CONFIG]: /usr/bin/pkg-config
+-----------
+Called: `/usr/bin/pkg-config --libs gtk+-x11-3.0` -> 0
+stdout:
+-lgtk-3 -lgdk-3 -lz -lpangocairo-1.0 -lpango-1.0 -lharfbuzz -latk-1.0 -lcairo-gobject -lcairo -lgdk_pixbuf-2.0 -lgio-2.0 -lgobject-2.0 -lglib-2.0
+-----------
+Run-time dependency gtk+-x11-3.0 found: YES 3.24.41
+Determining dependency 'vte-2.91' with pkg-config executable '/usr/bin/pkg-config'
+env[PKG_CONFIG_PATH]: 
+env[PKG_CONFIG]: /usr/bin/pkg-config
+-----------
+Called: `/usr/bin/pkg-config --modversion vte-2.91` -> 0
+stdout:
+0.76.0
+-----------
+env[PKG_CONFIG_PATH]: 
+env[PKG_CONFIG]: /usr/bin/pkg-config
+-----------
+Called: `/usr/bin/pkg-config --cflags vte-2.91` -> 0
+stdout:
+-I/usr/include/vte-2.91 -I/usr/include/cairo -I/usr/include/libpng16 -I/usr/include/freetype2 -I/usr/include/pixman-1 -I/usr/include/glib-2.0 -I/usr/lib/x86_64-linux-gnu/glib-2.0/include -I/usr/include/libmount -I/usr/include/blkid -I/usr/include/pango-1.0 -I/usr/include/harfbuzz -I/usr/include/fribidi -I/usr/include/gtk-3.0 -I/usr/include/gdk-pixbuf-2.0 -I/usr/include/x86_64-linux-gnu -I/usr/include/webp -I/usr/include/gio-unix-2.0 -I/usr/include/atk-1.0 -I/usr/include/at-spi2-atk/2.0 -I/usr/include/at-spi-2.0 -I/usr/include/dbus-1.0 -I/usr/lib/x86_64-linux-gnu/dbus-1.0/include -pthread
+-----------
+env[PKG_CONFIG_ALLOW_SYSTEM_LIBS]: 1
+env[PKG_CONFIG_PATH]: 
+env[PKG_CONFIG]: /usr/bin/pkg-config
+-----------
+Called: `/usr/bin/pkg-config --libs vte-2.91` -> 0
+stdout:
+-L/usr/lib/x86_64-linux-gnu -lvte-2.91 -lgtk-3 -lgdk-3 -lz -lpangocairo-1.0 -lpango-1.0 -lharfbuzz -latk-1.0 -lcairo-gobject -lcairo -lgdk_pixbuf-2.0 -lgio-2.0 -lgobject-2.0 -lglib-2.0
+-----------
+env[PKG_CONFIG_PATH]: 
+env[PKG_CONFIG]: /usr/bin/pkg-config
+-----------
+Called: `/usr/bin/pkg-config --libs vte-2.91` -> 0
+stdout:
+-lvte-2.91 -lgtk-3 -lgdk-3 -lz -lpangocairo-1.0 -lpango-1.0 -lharfbuzz -latk-1.0 -lcairo-gobject -lcairo -lgdk_pixbuf-2.0 -lgio-2.0 -lgobject-2.0 -lglib-2.0
+-----------
+Run-time dependency vte-2.91 found: YES 0.76.0
+Determining dependency 'x11' with pkg-config executable '/usr/bin/pkg-config'
+env[PKG_CONFIG_PATH]: 
+env[PKG_CONFIG]: /usr/bin/pkg-config
+-----------
+Called: `/usr/bin/pkg-config --modversion x11` -> 0
+stdout:
+1.8.7
+-----------
+env[PKG_CONFIG_PATH]: 
+env[PKG_CONFIG]: /usr/bin/pkg-config
+-----------
+Called: `/usr/bin/pkg-config --cflags x11` -> 0
+env[PKG_CONFIG_ALLOW_SYSTEM_LIBS]: 1
+env[PKG_CONFIG_PATH]: 
+env[PKG_CONFIG]: /usr/bin/pkg-config
+-----------
+Called: `/usr/bin/pkg-config --libs x11` -> 0
+stdout:
+-L/usr/lib/x86_64-linux-gnu -lX11
+-----------
+env[PKG_CONFIG_PATH]: 
+env[PKG_CONFIG]: /usr/bin/pkg-config
+-----------
+Called: `/usr/bin/pkg-config --libs x11` -> 0
+stdout:
+-lX11
+-----------
+Run-time dependency x11 found: YES 1.8.7
+Determining dependency 'libpng' with pkg-config executable '/usr/bin/pkg-config'
+env[PKG_CONFIG_PATH]: 
+env[PKG_CONFIG]: /usr/bin/pkg-config
+-----------
+Called: `/usr/bin/pkg-config --modversion libpng` -> 0
+stdout:
+1.6.43
+-----------
+env[PKG_CONFIG_PATH]: 
+env[PKG_CONFIG]: /usr/bin/pkg-config
+-----------
+Called: `/usr/bin/pkg-config --cflags libpng` -> 0
+stdout:
+-I/usr/include/libpng16
+-----------
+env[PKG_CONFIG_ALLOW_SYSTEM_LIBS]: 1
+env[PKG_CONFIG_PATH]: 
+env[PKG_CONFIG]: /usr/bin/pkg-config
+-----------
+Called: `/usr/bin/pkg-config --libs libpng` -> 0
+stdout:
+-L/usr/lib/x86_64-linux-gnu -lpng16
+-----------
+env[PKG_CONFIG_PATH]: 
+env[PKG_CONFIG]: /usr/bin/pkg-config
+-----------
+Called: `/usr/bin/pkg-config --libs libpng` -> 0
+stdout:
+-lpng16
+-----------
+Run-time dependency libpng found: YES 1.6.43
+Determining dependency 'libjpeg' with pkg-config executable '/usr/bin/pkg-config'
+env[PKG_CONFIG_PATH]: 
+env[PKG_CONFIG]: /usr/bin/pkg-config
+-----------
+Called: `/usr/bin/pkg-config --modversion libjpeg` -> 0
+stdout:
+2.1.5
+-----------
+env[PKG_CONFIG_PATH]: 
+env[PKG_CONFIG]: /usr/bin/pkg-config
+-----------
+Called: `/usr/bin/pkg-config --cflags libjpeg` -> 0
+env[PKG_CONFIG_ALLOW_SYSTEM_LIBS]: 1
+env[PKG_CONFIG_PATH]: 
+env[PKG_CONFIG]: /usr/bin/pkg-config
+-----------
+Called: `/usr/bin/pkg-config --libs libjpeg` -> 0
+stdout:
+-L/usr/lib/x86_64-linux-gnu -ljpeg
+-----------
+env[PKG_CONFIG_PATH]: 
+env[PKG_CONFIG]: /usr/bin/pkg-config
+-----------
+Called: `/usr/bin/pkg-config --libs libjpeg` -> 0
+stdout:
+-ljpeg
+-----------
+Run-time dependency libjpeg found: YES 2.1.5
+Running compile:
+Working directory:  /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpmr4sjrtj
+Code:
+ 
+        #ifdef __has_include
+         #if !__has_include("sasl/sasl.h")
+          #error "Header 'sasl/sasl.h' could not be found"
+         #endif
+        #else
+         #include <sasl/sasl.h>
+        #endif
+-----------
+Command line: `cc -m64 -mcx16 /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpmr4sjrtj/testfile.c -E -P -Wno-error -D_FILE_OFFSET_BITS=64 -P -O0 -std=gnu11` -> 0
+Has header "sasl/sasl.h" : YES 
+Running compile:
+Working directory:  /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpmetlthla
+Code:
+ int main(void) { return 0; }
+
+-----------
+Command line: `cc -m64 -mcx16 /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpmetlthla/testfile.c -o /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpmetlthla/output.exe -Wno-error -D_FILE_OFFSET_BITS=64 -O0 -Wl,--start-group -lsasl2 -Wl,--end-group -Wl,--allow-shlib-undefined` -> 0
+Library sasl2 found: YES
+Running compile:
+Working directory:  /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpkw9slo9b
+Code:
+ 
+        #ifdef __has_include
+         #if !__has_include("security/pam_appl.h")
+          #error "Header 'security/pam_appl.h' could not be found"
+         #endif
+        #else
+         #include <security/pam_appl.h>
+        #endif
+-----------
+Command line: `cc -m64 -mcx16 /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpkw9slo9b/testfile.c -E -P -Wno-error -D_FILE_OFFSET_BITS=64 -P -O0 -std=gnu11` -> 1
+stderr:
+/data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpkw9slo9b/testfile.c:4:12: error: #error "Header 'security/pam_appl.h' could not be found"
+    4 |           #error "Header 'security/pam_appl.h' could not be found"
+      |            ^~~~~
+-----------
+Has header "security/pam_appl.h" : NO 
+Running compile:
+Working directory:  /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpwbq_6pam
+Code:
+ 
+        #ifdef __has_include
+         #if !__has_include("snappy-c.h")
+          #error "Header 'snappy-c.h' could not be found"
+         #endif
+        #else
+         #include <snappy-c.h>
+        #endif
+-----------
+Command line: `cc -m64 -mcx16 /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpwbq_6pam/testfile.c -E -P -Wno-error -D_FILE_OFFSET_BITS=64 -P -O0 -std=gnu11` -> 1
+stderr:
+/data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpwbq_6pam/testfile.c:4:12: error: #error "Header 'snappy-c.h' could not be found"
+    4 |           #error "Header 'snappy-c.h' could not be found"
+      |            ^~~~~
+-----------
+Has header "snappy-c.h" : NO 
+Running compile:
+Working directory:  /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpc64u_3dc
+Code:
+ 
+        #ifdef __has_include
+         #if !__has_include("lzo/lzo1x.h")
+          #error "Header 'lzo/lzo1x.h' could not be found"
+         #endif
+        #else
+         #include <lzo/lzo1x.h>
+        #endif
+-----------
+Command line: `cc -m64 -mcx16 /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpc64u_3dc/testfile.c -E -P -Wno-error -D_FILE_OFFSET_BITS=64 -P -O0 -std=gnu11` -> 1
+stderr:
+/data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpc64u_3dc/testfile.c:4:12: error: #error "Header 'lzo/lzo1x.h' could not be found"
+    4 |           #error "Header 'lzo/lzo1x.h' could not be found"
+      |            ^~~~~
+-----------
+Has header "lzo/lzo1x.h" : NO 
+Determining dependency 'libcacard' with pkg-config executable '/usr/bin/pkg-config'
+env[PKG_CONFIG_PATH]: 
+env[PKG_CONFIG]: /usr/bin/pkg-config
+-----------
+Called: `/usr/bin/pkg-config --modversion libcacard` -> 0
+stdout:
+2.8.0
+-----------
+env[PKG_CONFIG_PATH]: 
+env[PKG_CONFIG]: /usr/bin/pkg-config
+-----------
+Called: `/usr/bin/pkg-config --cflags libcacard` -> 0
+stdout:
+-I/usr/include/cacard -I/usr/include/glib-2.0 -I/usr/lib/x86_64-linux-gnu/glib-2.0/include -I/usr/include/nss -I/usr/include/nspr -I/usr/include/PCSC -pthread
+-----------
+env[PKG_CONFIG_ALLOW_SYSTEM_LIBS]: 1
+env[PKG_CONFIG_PATH]: 
+env[PKG_CONFIG]: /usr/bin/pkg-config
+-----------
+Called: `/usr/bin/pkg-config --libs libcacard` -> 0
+stdout:
+-L/usr/lib/x86_64-linux-gnu -lcacard -lglib-2.0
+-----------
+env[PKG_CONFIG_PATH]: 
+env[PKG_CONFIG]: /usr/bin/pkg-config
+-----------
+Called: `/usr/bin/pkg-config --libs libcacard` -> 0
+stdout:
+-lcacard -lglib-2.0
+-----------
+Run-time dependency libcacard found: YES 2.8.0
+Determining dependency 'u2f-emu' with pkg-config executable '/usr/bin/pkg-config'
+env[PKG_CONFIG_PATH]: 
+env[PKG_CONFIG]: /usr/bin/pkg-config
+-----------
+Called: `/usr/bin/pkg-config --modversion u2f-emu` -> 1
+stderr:
+Package u2f-emu was not found in the pkg-config search path.
+Perhaps you should add the directory containing `u2f-emu.pc'
+to the PKG_CONFIG_PATH environment variable
+Package 'u2f-emu', required by 'virtual:world', not found
+-----------
+Run-time dependency u2f-emu found: NO (tried pkgconfig)
+Determining dependency 'libusbredirparser-0.5' with pkg-config executable '/usr/bin/pkg-config'
+env[PKG_CONFIG_PATH]: 
+env[PKG_CONFIG]: /usr/bin/pkg-config
+-----------
+Called: `/usr/bin/pkg-config --modversion libusbredirparser-0.5` -> 0
+stdout:
+0.13.0
+-----------
+env[PKG_CONFIG_PATH]: 
+env[PKG_CONFIG]: /usr/bin/pkg-config
+-----------
+Called: `/usr/bin/pkg-config --cflags libusbredirparser-0.5` -> 0
+env[PKG_CONFIG_ALLOW_SYSTEM_LIBS]: 1
+env[PKG_CONFIG_PATH]: 
+env[PKG_CONFIG]: /usr/bin/pkg-config
+-----------
+Called: `/usr/bin/pkg-config --libs libusbredirparser-0.5` -> 0
+stdout:
+-L/usr/lib/x86_64-linux-gnu -lusbredirparser
+-----------
+env[PKG_CONFIG_PATH]: 
+env[PKG_CONFIG]: /usr/bin/pkg-config
+-----------
+Called: `/usr/bin/pkg-config --libs libusbredirparser-0.5` -> 0
+stdout:
+-lusbredirparser
+-----------
+Run-time dependency libusbredirparser-0.5 found: YES 0.13.0
+Determining dependency 'libusb-1.0' with pkg-config executable '/usr/bin/pkg-config'
+env[PKG_CONFIG_PATH]: 
+env[PKG_CONFIG]: /usr/bin/pkg-config
+-----------
+Called: `/usr/bin/pkg-config --modversion libusb-1.0` -> 0
+stdout:
+1.0.27
+-----------
+env[PKG_CONFIG_PATH]: 
+env[PKG_CONFIG]: /usr/bin/pkg-config
+-----------
+Called: `/usr/bin/pkg-config --cflags libusb-1.0` -> 0
+stdout:
+-I/usr/include/libusb-1.0
+-----------
+env[PKG_CONFIG_ALLOW_SYSTEM_LIBS]: 1
+env[PKG_CONFIG_PATH]: 
+env[PKG_CONFIG]: /usr/bin/pkg-config
+-----------
+Called: `/usr/bin/pkg-config --libs libusb-1.0` -> 0
+stdout:
+-L/usr/lib/x86_64-linux-gnu -lusb-1.0
+-----------
+env[PKG_CONFIG_PATH]: 
+env[PKG_CONFIG]: /usr/bin/pkg-config
+-----------
+Called: `/usr/bin/pkg-config --libs libusb-1.0` -> 0
+stdout:
+-lusb-1.0
+-----------
+Run-time dependency libusb-1.0 found: YES 1.0.27
+Determining dependency 'libpmem' with pkg-config executable '/usr/bin/pkg-config'
+env[PKG_CONFIG_PATH]: 
+env[PKG_CONFIG]: /usr/bin/pkg-config
+-----------
+Called: `/usr/bin/pkg-config --modversion libpmem` -> 0
+stdout:
+1.13.1
+-----------
+env[PKG_CONFIG_PATH]: 
+env[PKG_CONFIG]: /usr/bin/pkg-config
+-----------
+Called: `/usr/bin/pkg-config --cflags libpmem` -> 0
+env[PKG_CONFIG_ALLOW_SYSTEM_LIBS]: 1
+env[PKG_CONFIG_PATH]: 
+env[PKG_CONFIG]: /usr/bin/pkg-config
+-----------
+Called: `/usr/bin/pkg-config --libs libpmem` -> 0
+stdout:
+-L/usr/lib/x86_64-linux-gnu -lpmem
+-----------
+env[PKG_CONFIG_PATH]: 
+env[PKG_CONFIG]: /usr/bin/pkg-config
+-----------
+Called: `/usr/bin/pkg-config --libs libpmem` -> 0
+stdout:
+-lpmem
+-----------
+Run-time dependency libpmem found: YES 1.13.1
+Determining dependency 'libdaxctl' with pkg-config executable '/usr/bin/pkg-config'
+env[PKG_CONFIG_PATH]: 
+env[PKG_CONFIG]: /usr/bin/pkg-config
+-----------
+Called: `/usr/bin/pkg-config --modversion libdaxctl` -> 1
+stderr:
+Package libdaxctl was not found in the pkg-config search path.
+Perhaps you should add the directory containing `libdaxctl.pc'
+to the PKG_CONFIG_PATH environment variable
+Package 'libdaxctl', required by 'virtual:world', not found
+-----------
+Run-time dependency libdaxctl found: NO (tried pkgconfig)
+Determining dependency 'libtasn1' with pkg-config executable '/usr/bin/pkg-config'
+env[PKG_CONFIG_PATH]: 
+env[PKG_CONFIG]: /usr/bin/pkg-config
+-----------
+Called: `/usr/bin/pkg-config --modversion libtasn1` -> 0
+stdout:
+4.19.0
+-----------
+env[PKG_CONFIG_PATH]: 
+env[PKG_CONFIG]: /usr/bin/pkg-config
+-----------
+Called: `/usr/bin/pkg-config --cflags libtasn1` -> 0
+env[PKG_CONFIG_ALLOW_SYSTEM_LIBS]: 1
+env[PKG_CONFIG_PATH]: 
+env[PKG_CONFIG]: /usr/bin/pkg-config
+-----------
+Called: `/usr/bin/pkg-config --libs libtasn1` -> 0
+stdout:
+-L/usr/lib/x86_64-linux-gnu -ltasn1
+-----------
+env[PKG_CONFIG_PATH]: 
+env[PKG_CONFIG]: /usr/bin/pkg-config
+-----------
+Called: `/usr/bin/pkg-config --libs libtasn1` -> 0
+stdout:
+-ltasn1
+-----------
+Run-time dependency libtasn1 found: YES 4.19.0
+Determining dependency 'libkeyutils' with pkg-config executable '/usr/bin/pkg-config'
+env[PKG_CONFIG_PATH]: 
+env[PKG_CONFIG]: /usr/bin/pkg-config
+-----------
+Called: `/usr/bin/pkg-config --modversion libkeyutils` -> 1
+stderr:
+Package libkeyutils was not found in the pkg-config search path.
+Perhaps you should add the directory containing `libkeyutils.pc'
+to the PKG_CONFIG_PATH environment variable
+Package 'libkeyutils', required by 'virtual:world', not found
+-----------
+Run-time dependency libkeyutils found: NO (tried pkgconfig)
+Running compile:
+Working directory:  /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpkhsj3zn4
+Code:
+ 
+        #define gettid meson_disable_define_of_gettid
+        
+        #include <limits.h>
+        #undef gettid
+        
+        #ifdef __cplusplus
+        extern "C"
+        #endif
+        char gettid (void);
+        
+        #if defined __stub_gettid || defined __stub___gettid
+        fail fail fail this function is not going to work
+        #endif
+        
+        int main(void) {
+          return gettid ();
+        }
+-----------
+Command line: `cc -m64 -mcx16 /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpkhsj3zn4/testfile.c -o /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpkhsj3zn4/output.exe -Wno-error -D_FILE_OFFSET_BITS=64 -O0 -std=gnu11` -> 0
+Checking for function "gettid" : YES 
+Determining dependency 'libselinux' with pkg-config executable '/usr/bin/pkg-config'
+env[PKG_CONFIG_PATH]: 
+env[PKG_CONFIG]: /usr/bin/pkg-config
+-----------
+Called: `/usr/bin/pkg-config --modversion libselinux` -> 0
+stdout:
+3.5
+-----------
+env[PKG_CONFIG_PATH]: 
+env[PKG_CONFIG]: /usr/bin/pkg-config
+-----------
+Called: `/usr/bin/pkg-config --cflags libselinux` -> 0
+env[PKG_CONFIG_ALLOW_SYSTEM_LIBS]: 1
+env[PKG_CONFIG_PATH]: 
+env[PKG_CONFIG]: /usr/bin/pkg-config
+-----------
+Called: `/usr/bin/pkg-config --libs libselinux` -> 0
+stdout:
+-L/usr/lib -lselinux
+-----------
+env[PKG_CONFIG_PATH]: 
+env[PKG_CONFIG]: /usr/bin/pkg-config
+-----------
+Called: `/usr/bin/pkg-config --libs libselinux` -> 0
+stdout:
+-lselinux
+-----------
+Run-time dependency libselinux found: YES 3.5
+Running compile:
+Working directory:  /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpdr06lmwg
+Code:
+ #include <malloc.h>
+                int main(void) { malloc_trim(0); return 0; }
+-----------
+Command line: `cc -m64 -mcx16 /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpdr06lmwg/testfile.c -o /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpdr06lmwg/output.exe -Wno-error -D_FILE_OFFSET_BITS=64 -O0 -std=gnu11` -> 0
+Running compile:
+Working directory:  /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmp5zvtrtbt
+Code:
+ 
+  #ifndef _GNU_SOURCE
+  #define _GNU_SOURCE
+  #endif
+
+  #include <sys/stat.h>
+  int main(void) {
+    struct statx statxbuf;
+    statx(0, "", 0, STATX_BASIC_STATS, &statxbuf);
+    return 0;
+  }
+-----------
+Command line: `cc -m64 -mcx16 /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmp5zvtrtbt/testfile.c -o /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmp5zvtrtbt/output.exe -Wno-error -D_FILE_OFFSET_BITS=64 -O0 -std=gnu11` -> 0
+Determining dependency 'fuse3' with pkg-config executable '/usr/bin/pkg-config'
+env[PKG_CONFIG_PATH]: 
+env[PKG_CONFIG]: /usr/bin/pkg-config
+-----------
+Called: `/usr/bin/pkg-config --modversion fuse3` -> 0
+stdout:
+3.14.0
+-----------
+env[PKG_CONFIG_PATH]: 
+env[PKG_CONFIG]: /usr/bin/pkg-config
+-----------
+Called: `/usr/bin/pkg-config --cflags fuse3` -> 0
+stdout:
+-I/usr/include/fuse3
+-----------
+env[PKG_CONFIG_ALLOW_SYSTEM_LIBS]: 1
+env[PKG_CONFIG_PATH]: 
+env[PKG_CONFIG]: /usr/bin/pkg-config
+-----------
+Called: `/usr/bin/pkg-config --libs fuse3` -> 0
+stdout:
+-L/usr/lib/x86_64-linux-gnu -lfuse3 -lpthread
+-----------
+env[PKG_CONFIG_PATH]: 
+env[PKG_CONFIG]: /usr/bin/pkg-config
+-----------
+Called: `/usr/bin/pkg-config --libs fuse3` -> 0
+stdout:
+-lfuse3 -lpthread
+-----------
+Run-time dependency fuse3 found: YES 3.14.0
+Determining dependency 'libbpf' with pkg-config executable '/usr/bin/pkg-config'
+env[PKG_CONFIG_PATH]: 
+env[PKG_CONFIG]: /usr/bin/pkg-config
+-----------
+Called: `/usr/bin/pkg-config --modversion libbpf` -> 1
+stderr:
+Package libbpf was not found in the pkg-config search path.
+Perhaps you should add the directory containing `libbpf.pc'
+to the PKG_CONFIG_PATH environment variable
+Package 'libbpf', required by 'virtual:world', not found
+-----------
+Run-time dependency libbpf found: NO (tried pkgconfig)
+Running compile:
+Working directory:  /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmp6uo8l8mk
+Code:
+ 
+        #ifdef __has_include
+         #if !__has_include("sys/epoll.h")
+          #error "Header 'sys/epoll.h' could not be found"
+         #endif
+        #else
+         #include <sys/epoll.h>
+        #endif
+-----------
+Command line: `cc -m64 -mcx16 /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmp6uo8l8mk/testfile.c -E -P -Wno-error -D_FILE_OFFSET_BITS=64 -P -O0 -std=gnu11` -> 0
+Has header "sys/epoll.h" : YES 
+Running compile:
+Working directory:  /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpvm0fal7y
+Code:
+ 
+        #ifdef __has_include
+         #if !__has_include("linux/magic.h")
+          #error "Header 'linux/magic.h' could not be found"
+         #endif
+        #else
+         #include <linux/magic.h>
+        #endif
+-----------
+Command line: `cc -m64 -mcx16 /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpvm0fal7y/testfile.c -E -P -Wno-error -D_FILE_OFFSET_BITS=64 -P -O0 -std=gnu11` -> 0
+Has header "linux/magic.h" : YES 
+Running compile:
+Working directory:  /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmptv6idhs7
+Code:
+ 
+        #ifdef __has_include
+         #if !__has_include("valgrind/valgrind.h")
+          #error "Header 'valgrind/valgrind.h' could not be found"
+         #endif
+        #else
+         #include <valgrind/valgrind.h>
+        #endif
+-----------
+Command line: `cc -m64 -mcx16 /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmptv6idhs7/testfile.c -E -P -Wno-error -D_FILE_OFFSET_BITS=64 -P -O0 -std=gnu11` -> 1
+stderr:
+/data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmptv6idhs7/testfile.c:4:12: error: #error "Header 'valgrind/valgrind.h' could not be found"
+    4 |           #error "Header 'valgrind/valgrind.h' could not be found"
+      |            ^~~~~
+-----------
+Has header "valgrind/valgrind.h" : NO 
+Running compile:
+Working directory:  /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmp6e6564hc
+Code:
+ 
+        #ifdef __has_include
+         #if !__has_include("linux/btrfs.h")
+          #error "Header 'linux/btrfs.h' could not be found"
+         #endif
+        #else
+         #include <linux/btrfs.h>
+        #endif
+-----------
+Command line: `cc -m64 -mcx16 /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmp6e6564hc/testfile.c -E -P -Wno-error -D_FILE_OFFSET_BITS=64 -P -O0 -std=gnu11` -> 0
+Has header "linux/btrfs.h" : YES 
+Running compile:
+Working directory:  /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpy4movrjf
+Code:
+ 
+        #ifdef __has_include
+         #if !__has_include("libdrm/drm.h")
+          #error "Header 'libdrm/drm.h' could not be found"
+         #endif
+        #else
+         #include <libdrm/drm.h>
+        #endif
+-----------
+Command line: `cc -m64 -mcx16 /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpy4movrjf/testfile.c -E -P -Wno-error -D_FILE_OFFSET_BITS=64 -P -O0 -std=gnu11` -> 0
+Has header "libdrm/drm.h" : YES 
+Running compile:
+Working directory:  /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpjth7l2ob
+Code:
+ 
+        #ifdef __has_include
+         #if !__has_include("pty.h")
+          #error "Header 'pty.h' could not be found"
+         #endif
+        #else
+         #include <pty.h>
+        #endif
+-----------
+Command line: `cc -m64 -mcx16 /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpjth7l2ob/testfile.c -E -P -Wno-error -D_FILE_OFFSET_BITS=64 -P -O0 -std=gnu11` -> 0
+Has header "pty.h" : YES 
+Running compile:
+Working directory:  /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpk_hzn4fi
+Code:
+ 
+        #ifdef __has_include
+         #if !__has_include("sys/disk.h")
+          #error "Header 'sys/disk.h' could not be found"
+         #endif
+        #else
+         #include <sys/disk.h>
+        #endif
+-----------
+Command line: `cc -m64 -mcx16 /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpk_hzn4fi/testfile.c -E -P -Wno-error -D_FILE_OFFSET_BITS=64 -P -O0 -std=gnu11` -> 1
+stderr:
+/data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpk_hzn4fi/testfile.c:4:12: error: #error "Header 'sys/disk.h' could not be found"
+    4 |           #error "Header 'sys/disk.h' could not be found"
+      |            ^~~~~
+-----------
+Has header "sys/disk.h" : NO 
+Running compile:
+Working directory:  /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpr5c4heg6
+Code:
+ 
+        #ifdef __has_include
+         #if !__has_include("sys/ioccom.h")
+          #error "Header 'sys/ioccom.h' could not be found"
+         #endif
+        #else
+         #include <sys/ioccom.h>
+        #endif
+-----------
+Command line: `cc -m64 -mcx16 /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpr5c4heg6/testfile.c -E -P -Wno-error -D_FILE_OFFSET_BITS=64 -P -O0 -std=gnu11` -> 1
+stderr:
+/data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpr5c4heg6/testfile.c:4:12: error: #error "Header 'sys/ioccom.h' could not be found"
+    4 |           #error "Header 'sys/ioccom.h' could not be found"
+      |            ^~~~~
+-----------
+Has header "sys/ioccom.h" : NO 
+Running compile:
+Working directory:  /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmp95am776w
+Code:
+ 
+        #ifdef __has_include
+         #if !__has_include("sys/kcov.h")
+          #error "Header 'sys/kcov.h' could not be found"
+         #endif
+        #else
+         #include <sys/kcov.h>
+        #endif
+-----------
+Command line: `cc -m64 -mcx16 /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmp95am776w/testfile.c -E -P -Wno-error -D_FILE_OFFSET_BITS=64 -P -O0 -std=gnu11` -> 1
+stderr:
+/data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmp95am776w/testfile.c:4:12: error: #error "Header 'sys/kcov.h' could not be found"
+    4 |           #error "Header 'sys/kcov.h' could not be found"
+      |            ^~~~~
+-----------
+Has header "sys/kcov.h" : NO 
+Running compile:
+Working directory:  /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpnlcinjdc
+Code:
+ 
+        #define accept4 meson_disable_define_of_accept4
+        
+        #include <limits.h>
+        #undef accept4
+        
+        #ifdef __cplusplus
+        extern "C"
+        #endif
+        char accept4 (void);
+        
+        #if defined __stub_accept4 || defined __stub___accept4
+        fail fail fail this function is not going to work
+        #endif
+        
+        int main(void) {
+          return accept4 ();
+        }
+-----------
+Command line: `cc -m64 -mcx16 /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpnlcinjdc/testfile.c -o /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpnlcinjdc/output.exe -Wno-error -D_FILE_OFFSET_BITS=64 -O0 -std=gnu11` -> 0
+Checking for function "accept4" : YES 
+Running compile:
+Working directory:  /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpczucorjq
+Code:
+ 
+        #define clock_adjtime meson_disable_define_of_clock_adjtime
+        
+        #include <limits.h>
+        #undef clock_adjtime
+        
+        #ifdef __cplusplus
+        extern "C"
+        #endif
+        char clock_adjtime (void);
+        
+        #if defined __stub_clock_adjtime || defined __stub___clock_adjtime
+        fail fail fail this function is not going to work
+        #endif
+        
+        int main(void) {
+          return clock_adjtime ();
+        }
+-----------
+Command line: `cc -m64 -mcx16 /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpczucorjq/testfile.c -o /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpczucorjq/output.exe -Wno-error -D_FILE_OFFSET_BITS=64 -O0 -std=gnu11` -> 0
+Checking for function "clock_adjtime" : YES 
+Running compile:
+Working directory:  /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpxcfmf44_
+Code:
+ 
+        #define dup3 meson_disable_define_of_dup3
+        
+        #include <limits.h>
+        #undef dup3
+        
+        #ifdef __cplusplus
+        extern "C"
+        #endif
+        char dup3 (void);
+        
+        #if defined __stub_dup3 || defined __stub___dup3
+        fail fail fail this function is not going to work
+        #endif
+        
+        int main(void) {
+          return dup3 ();
+        }
+-----------
+Command line: `cc -m64 -mcx16 /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpxcfmf44_/testfile.c -o /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpxcfmf44_/output.exe -Wno-error -D_FILE_OFFSET_BITS=64 -O0 -std=gnu11` -> 0
+Checking for function "dup3" : YES 
+Running compile:
+Working directory:  /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpcw4e10zl
+Code:
+ 
+        #define fallocate meson_disable_define_of_fallocate
+        
+        #include <limits.h>
+        #undef fallocate
+        
+        #ifdef __cplusplus
+        extern "C"
+        #endif
+        char fallocate (void);
+        
+        #if defined __stub_fallocate || defined __stub___fallocate
+        fail fail fail this function is not going to work
+        #endif
+        
+        int main(void) {
+          return fallocate ();
+        }
+-----------
+Command line: `cc -m64 -mcx16 /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpcw4e10zl/testfile.c -o /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpcw4e10zl/output.exe -Wno-error -D_FILE_OFFSET_BITS=64 -O0 -std=gnu11` -> 0
+Checking for function "fallocate" : YES 
+Running compile:
+Working directory:  /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpfpmeiu6n
+Code:
+ 
+        #define posix_fallocate meson_disable_define_of_posix_fallocate
+        
+        #include <limits.h>
+        #undef posix_fallocate
+        
+        #ifdef __cplusplus
+        extern "C"
+        #endif
+        char posix_fallocate (void);
+        
+        #if defined __stub_posix_fallocate || defined __stub___posix_fallocate
+        fail fail fail this function is not going to work
+        #endif
+        
+        int main(void) {
+          return posix_fallocate ();
+        }
+-----------
+Command line: `cc -m64 -mcx16 /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpfpmeiu6n/testfile.c -o /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpfpmeiu6n/output.exe -Wno-error -D_FILE_OFFSET_BITS=64 -O0 -std=gnu11` -> 0
+Checking for function "posix_fallocate" : YES 
+Running compile:
+Working directory:  /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpots1q3sg
+Code:
+ 
+        #define posix_memalign meson_disable_define_of_posix_memalign
+        
+        #include <limits.h>
+        #undef posix_memalign
+        
+        #ifdef __cplusplus
+        extern "C"
+        #endif
+        char posix_memalign (void);
+        
+        #if defined __stub_posix_memalign || defined __stub___posix_memalign
+        fail fail fail this function is not going to work
+        #endif
+        
+        int main(void) {
+          return posix_memalign ();
+        }
+-----------
+Command line: `cc -m64 -mcx16 /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpots1q3sg/testfile.c -o /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpots1q3sg/output.exe -Wno-error -D_FILE_OFFSET_BITS=64 -O0 -std=gnu11` -> 0
+stderr:
+/data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpots1q3sg/testfile.c:10:14: warning: conflicting types for built-in function 'posix_memalign'; expected 'int(void **, long unsigned int,  long unsigned int)' [-Wbuiltin-declaration-mismatch]
+   10 |         char posix_memalign (void);
+      |              ^~~~~~~~~~~~~~
+-----------
+Checking for function "posix_memalign" : YES 
+Running compile:
+Working directory:  /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmp37mjp93o
+Code:
+ 
+        #define ppoll meson_disable_define_of_ppoll
+        
+        #include <limits.h>
+        #undef ppoll
+        
+        #ifdef __cplusplus
+        extern "C"
+        #endif
+        char ppoll (void);
+        
+        #if defined __stub_ppoll || defined __stub___ppoll
+        fail fail fail this function is not going to work
+        #endif
+        
+        int main(void) {
+          return ppoll ();
+        }
+-----------
+Command line: `cc -m64 -mcx16 /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmp37mjp93o/testfile.c -o /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmp37mjp93o/output.exe -Wno-error -D_FILE_OFFSET_BITS=64 -O0 -std=gnu11` -> 0
+Checking for function "ppoll" : YES 
+Running compile:
+Working directory:  /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpz9dr30yt
+Code:
+ #include <sys/uio.h>
+#include <limits.h>
+
+        #if defined __stub_preadv || defined __stub___preadv
+        fail fail fail this function is not going to work
+        #endif
+        
+int main(void) {
+            void *a = (void*) &preadv;
+            long long b = (long long) a;
+            return (int) b;
+        }
+-----------
+Command line: `cc -m64 -mcx16 /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpz9dr30yt/testfile.c -o /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpz9dr30yt/output.exe -Wno-error -D_FILE_OFFSET_BITS=64 -O0 -std=gnu11` -> 0
+Checking for function "preadv" : YES 
+Running compile:
+Working directory:  /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpw6usko17
+Code:
+ 
+        #define sem_timedwait meson_disable_define_of_sem_timedwait
+        
+        #include <limits.h>
+        #undef sem_timedwait
+        
+        #ifdef __cplusplus
+        extern "C"
+        #endif
+        char sem_timedwait (void);
+        
+        #if defined __stub_sem_timedwait || defined __stub___sem_timedwait
+        fail fail fail this function is not going to work
+        #endif
+        
+        int main(void) {
+          return sem_timedwait ();
+        }
+-----------
+Command line: `cc -m64 -mcx16 /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpw6usko17/testfile.c -o /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpw6usko17/output.exe -pthread -Wno-error -D_FILE_OFFSET_BITS=64 -O0 -std=gnu11` -> 0
+Checking for function "sem_timedwait" with dependency threads: YES 
+Running compile:
+Working directory:  /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpi7fjs7ek
+Code:
+ 
+        #define sendfile meson_disable_define_of_sendfile
+        
+        #include <limits.h>
+        #undef sendfile
+        
+        #ifdef __cplusplus
+        extern "C"
+        #endif
+        char sendfile (void);
+        
+        #if defined __stub_sendfile || defined __stub___sendfile
+        fail fail fail this function is not going to work
+        #endif
+        
+        int main(void) {
+          return sendfile ();
+        }
+-----------
+Command line: `cc -m64 -mcx16 /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpi7fjs7ek/testfile.c -o /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpi7fjs7ek/output.exe -Wno-error -D_FILE_OFFSET_BITS=64 -O0 -std=gnu11` -> 0
+Checking for function "sendfile" : YES 
+Running compile:
+Working directory:  /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmp69g4tbmp
+Code:
+ 
+        #define setns meson_disable_define_of_setns
+        
+        #include <limits.h>
+        #undef setns
+        
+        #ifdef __cplusplus
+        extern "C"
+        #endif
+        char setns (void);
+        
+        #if defined __stub_setns || defined __stub___setns
+        fail fail fail this function is not going to work
+        #endif
+        
+        int main(void) {
+          return setns ();
+        }
+-----------
+Command line: `cc -m64 -mcx16 /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmp69g4tbmp/testfile.c -o /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmp69g4tbmp/output.exe -Wno-error -D_FILE_OFFSET_BITS=64 -O0 -std=gnu11` -> 0
+Checking for function "setns" : YES 
+Running compile:
+Working directory:  /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpswgmpzi8
+Code:
+ 
+        #define unshare meson_disable_define_of_unshare
+        
+        #include <limits.h>
+        #undef unshare
+        
+        #ifdef __cplusplus
+        extern "C"
+        #endif
+        char unshare (void);
+        
+        #if defined __stub_unshare || defined __stub___unshare
+        fail fail fail this function is not going to work
+        #endif
+        
+        int main(void) {
+          return unshare ();
+        }
+-----------
+Command line: `cc -m64 -mcx16 /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpswgmpzi8/testfile.c -o /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpswgmpzi8/output.exe -Wno-error -D_FILE_OFFSET_BITS=64 -O0 -std=gnu11` -> 0
+Checking for function "unshare" : YES 
+Running compile:
+Working directory:  /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpy6l18uio
+Code:
+ 
+        #define syncfs meson_disable_define_of_syncfs
+        
+        #include <limits.h>
+        #undef syncfs
+        
+        #ifdef __cplusplus
+        extern "C"
+        #endif
+        char syncfs (void);
+        
+        #if defined __stub_syncfs || defined __stub___syncfs
+        fail fail fail this function is not going to work
+        #endif
+        
+        int main(void) {
+          return syncfs ();
+        }
+-----------
+Command line: `cc -m64 -mcx16 /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpy6l18uio/testfile.c -o /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpy6l18uio/output.exe -Wno-error -D_FILE_OFFSET_BITS=64 -O0 -std=gnu11` -> 0
+Checking for function "syncfs" : YES 
+Running compile:
+Working directory:  /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpta9_fmnb
+Code:
+ 
+        #define sync_file_range meson_disable_define_of_sync_file_range
+        
+        #include <limits.h>
+        #undef sync_file_range
+        
+        #ifdef __cplusplus
+        extern "C"
+        #endif
+        char sync_file_range (void);
+        
+        #if defined __stub_sync_file_range || defined __stub___sync_file_range
+        fail fail fail this function is not going to work
+        #endif
+        
+        int main(void) {
+          return sync_file_range ();
+        }
+-----------
+Command line: `cc -m64 -mcx16 /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpta9_fmnb/testfile.c -o /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpta9_fmnb/output.exe -Wno-error -D_FILE_OFFSET_BITS=64 -O0 -std=gnu11` -> 0
+Checking for function "sync_file_range" : YES 
+Running compile:
+Working directory:  /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmp7s4rhfsb
+Code:
+ 
+        #define timerfd_create meson_disable_define_of_timerfd_create
+        
+        #include <limits.h>
+        #undef timerfd_create
+        
+        #ifdef __cplusplus
+        extern "C"
+        #endif
+        char timerfd_create (void);
+        
+        #if defined __stub_timerfd_create || defined __stub___timerfd_create
+        fail fail fail this function is not going to work
+        #endif
+        
+        int main(void) {
+          return timerfd_create ();
+        }
+-----------
+Command line: `cc -m64 -mcx16 /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmp7s4rhfsb/testfile.c -o /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmp7s4rhfsb/output.exe -Wno-error -D_FILE_OFFSET_BITS=64 -O0 -std=gnu11` -> 0
+Checking for function "timerfd_create" : YES 
+Running compile:
+Working directory:  /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpzzc3b98g
+Code:
+ 
+        #define copy_file_range meson_disable_define_of_copy_file_range
+        
+        #include <limits.h>
+        #undef copy_file_range
+        
+        #ifdef __cplusplus
+        extern "C"
+        #endif
+        char copy_file_range (void);
+        
+        #if defined __stub_copy_file_range || defined __stub___copy_file_range
+        fail fail fail this function is not going to work
+        #endif
+        
+        int main(void) {
+          return copy_file_range ();
+        }
+-----------
+Command line: `cc -m64 -mcx16 /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpzzc3b98g/testfile.c -o /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpzzc3b98g/output.exe -Wno-error -D_FILE_OFFSET_BITS=64 -O0 -std=gnu11` -> 0
+Checking for function "copy_file_range" : YES 
+Running compile:
+Working directory:  /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmp7oyc6nb4
+Code:
+ 
+        #define openpty meson_disable_define_of_openpty
+        
+        #include <limits.h>
+        #undef openpty
+        
+        #ifdef __cplusplus
+        extern "C"
+        #endif
+        char openpty (void);
+        
+        #if defined __stub_openpty || defined __stub___openpty
+        fail fail fail this function is not going to work
+        #endif
+        
+        int main(void) {
+          return openpty ();
+        }
+-----------
+Command line: `cc -m64 -mcx16 /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmp7oyc6nb4/testfile.c -o /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmp7oyc6nb4/output.exe -Wno-error -D_FILE_OFFSET_BITS=64 -O0 -std=gnu11 -Wl,--start-group -lutil -Wl,--end-group` -> 0
+Checking for function "openpty" with dependency -lutil: YES 
+Running compile:
+Working directory:  /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmp2ftm3syk
+Code:
+ 
+        #define strchrnul meson_disable_define_of_strchrnul
+        
+        #include <limits.h>
+        #undef strchrnul
+        
+        #ifdef __cplusplus
+        extern "C"
+        #endif
+        char strchrnul (void);
+        
+        #if defined __stub_strchrnul || defined __stub___strchrnul
+        fail fail fail this function is not going to work
+        #endif
+        
+        int main(void) {
+          return strchrnul ();
+        }
+-----------
+Command line: `cc -m64 -mcx16 /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmp2ftm3syk/testfile.c -o /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmp2ftm3syk/output.exe -Wno-error -D_FILE_OFFSET_BITS=64 -O0 -std=gnu11` -> 0
+Checking for function "strchrnul" : YES 
+Running compile:
+Working directory:  /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpzcfwkhsj
+Code:
+ #include <stdlib.h>
+#include <limits.h>
+
+        #if defined __stub_system || defined __stub___system
+        fail fail fail this function is not going to work
+        #endif
+        
+int main(void) {
+            void *a = (void*) &system;
+            long long b = (long long) a;
+            return (int) b;
+        }
+-----------
+Command line: `cc -m64 -mcx16 /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpzcfwkhsj/testfile.c -o /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpzcfwkhsj/output.exe -Wno-error -D_FILE_OFFSET_BITS=64 -O0 -std=gnu11` -> 0
+Checking for function "system" : YES 
+Running compile:
+Working directory:  /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpyetqd7mn
+Code:
+ #include <infiniband/verbs.h>
+#include <limits.h>
+
+        #if defined __stub_ibv_advise_mr || defined __stub___ibv_advise_mr
+        fail fail fail this function is not going to work
+        #endif
+        
+int main(void) {
+            void *a = (void*) &ibv_advise_mr;
+            long long b = (long long) a;
+            return (int) b;
+        }
+-----------
+Command line: `cc -m64 -mcx16 /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpyetqd7mn/testfile.c -o /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpyetqd7mn/output.exe -Wno-error -D_FILE_OFFSET_BITS=64 -O0 -std=gnu11 -Wl,--start-group -lrdmacm -libverbs -libumad -Wl,--end-group` -> 0
+Checking for function "ibv_advise_mr" : YES 
+Running compile:
+Working directory:  /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpw3cttqne
+Code:
+ 
+        #include <byteswap.h>
+        int main(void) {
+            /* If it's not defined as a macro, try to use as a symbol */
+            #ifndef bswap_32
+                bswap_32;
+            #endif
+            return 0;
+        }
+-----------
+Command line: `cc -m64 -mcx16 /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpw3cttqne/testfile.c -o /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpw3cttqne/output.obj -c -Wno-error -D_FILE_OFFSET_BITS=64 -O0 -std=gnu11` -> 0
+Header "byteswap.h" has symbol "bswap_32" : YES 
+Running compile:
+Working directory:  /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpjou4m2r2
+Code:
+ 
+        #include <sys/epoll.h>
+        int main(void) {
+            /* If it's not defined as a macro, try to use as a symbol */
+            #ifndef epoll_create1
+                epoll_create1;
+            #endif
+            return 0;
+        }
+-----------
+Command line: `cc -m64 -mcx16 /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpjou4m2r2/testfile.c -o /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpjou4m2r2/output.obj -c -Wno-error -D_FILE_OFFSET_BITS=64 -O0 -std=gnu11` -> 0
+Header "sys/epoll.h" has symbol "epoll_create1" : YES 
+Running compile:
+Working directory:  /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpwco4fwlw
+Code:
+ 
+  #ifndef _GNU_SOURCE
+  #define _GNU_SOURCE
+  #endif
+
+        #include <unistd.h>
+        int main(void) {
+            /* If it's not defined as a macro, try to use as a symbol */
+            #ifndef environ
+                environ;
+            #endif
+            return 0;
+        }
+-----------
+Command line: `cc -m64 -mcx16 /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpwco4fwlw/testfile.c -o /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpwco4fwlw/output.obj -c -Wno-error -D_FILE_OFFSET_BITS=64 -O0 -std=gnu11` -> 0
+Header "unistd.h" has symbol "environ" : YES 
+Running compile:
+Working directory:  /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmp0obe04t_
+Code:
+ 
+        #include <linux/falloc.h>
+        int main(void) {
+            /* If it's not defined as a macro, try to use as a symbol */
+            #ifndef FALLOC_FL_PUNCH_HOLE
+                FALLOC_FL_PUNCH_HOLE;
+            #endif
+            return 0;
+        }
+-----------
+Command line: `cc -m64 -mcx16 /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmp0obe04t_/testfile.c -o /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmp0obe04t_/output.obj -c -Wno-error -D_FILE_OFFSET_BITS=64 -O0 -std=gnu11` -> 0
+Header "linux/falloc.h" has symbol "FALLOC_FL_PUNCH_HOLE" : YES 
+Running compile:
+Working directory:  /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmp12cusrr1
+Code:
+ 
+        #include <linux/falloc.h>
+        int main(void) {
+            /* If it's not defined as a macro, try to use as a symbol */
+            #ifndef FALLOC_FL_KEEP_SIZE
+                FALLOC_FL_KEEP_SIZE;
+            #endif
+            return 0;
+        }
+-----------
+Command line: `cc -m64 -mcx16 /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmp12cusrr1/testfile.c -o /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmp12cusrr1/output.obj -c -Wno-error -D_FILE_OFFSET_BITS=64 -O0 -std=gnu11` -> 0
+Header "linux/falloc.h" has symbol "FALLOC_FL_KEEP_SIZE" : YES 
+Running compile:
+Working directory:  /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpkic6yn7l
+Code:
+ 
+        #include <linux/falloc.h>
+        int main(void) {
+            /* If it's not defined as a macro, try to use as a symbol */
+            #ifndef FALLOC_FL_ZERO_RANGE
+                FALLOC_FL_ZERO_RANGE;
+            #endif
+            return 0;
+        }
+-----------
+Command line: `cc -m64 -mcx16 /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpkic6yn7l/testfile.c -o /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpkic6yn7l/output.obj -c -Wno-error -D_FILE_OFFSET_BITS=64 -O0 -std=gnu11` -> 0
+Header "linux/falloc.h" has symbol "FALLOC_FL_ZERO_RANGE" : YES 
+Running compile:
+Working directory:  /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmp5ji7q49c
+Code:
+ 
+        #ifdef __has_include
+         #if !__has_include("linux/fiemap.h")
+          #error "Header 'linux/fiemap.h' could not be found"
+         #endif
+        #else
+         #include <linux/fiemap.h>
+        #endif
+-----------
+Command line: `cc -m64 -mcx16 /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmp5ji7q49c/testfile.c -E -P -Wno-error -D_FILE_OFFSET_BITS=64 -P -O0 -std=gnu11` -> 0
+Has header "linux/fiemap.h" : YES 
+Running compile:
+Working directory:  /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpdvon6vju
+Code:
+ 
+        #include <linux/fs.h>
+        int main(void) {
+            /* If it's not defined as a macro, try to use as a symbol */
+            #ifndef FS_IOC_FIEMAP
+                FS_IOC_FIEMAP;
+            #endif
+            return 0;
+        }
+-----------
+Command line: `cc -m64 -mcx16 /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpdvon6vju/testfile.c -o /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpdvon6vju/output.obj -c -Wno-error -D_FILE_OFFSET_BITS=64 -O0 -std=gnu11` -> 0
+Header "linux/fs.h" has symbol "FS_IOC_FIEMAP" : YES 
+Running compile:
+Working directory:  /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmptprsgnua
+Code:
+ 
+        #define getrandom meson_disable_define_of_getrandom
+        
+        #include <limits.h>
+        #undef getrandom
+        
+        #ifdef __cplusplus
+        extern "C"
+        #endif
+        char getrandom (void);
+        
+        #if defined __stub_getrandom || defined __stub___getrandom
+        fail fail fail this function is not going to work
+        #endif
+        
+        int main(void) {
+          return getrandom ();
+        }
+-----------
+Command line: `cc -m64 -mcx16 /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmptprsgnua/testfile.c -o /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmptprsgnua/output.exe -Wno-error -D_FILE_OFFSET_BITS=64 -O0 -std=gnu11` -> 0
+Checking for function "getrandom" : YES 
+Running compile:
+Working directory:  /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmp_yyggc21
+Code:
+ 
+        #include <sys/random.h>
+        int main(void) {
+            /* If it's not defined as a macro, try to use as a symbol */
+            #ifndef GRND_NONBLOCK
+                GRND_NONBLOCK;
+            #endif
+            return 0;
+        }
+-----------
+Command line: `cc -m64 -mcx16 /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmp_yyggc21/testfile.c -o /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmp_yyggc21/output.obj -c -Wno-error -D_FILE_OFFSET_BITS=64 -O0 -std=gnu11` -> 0
+Header "sys/random.h" has symbol "GRND_NONBLOCK" : YES 
+Running compile:
+Working directory:  /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmppa5_621j
+Code:
+ 
+        #include <sys/inotify.h>
+        int main(void) {
+            /* If it's not defined as a macro, try to use as a symbol */
+            #ifndef inotify_init
+                inotify_init;
+            #endif
+            return 0;
+        }
+-----------
+Command line: `cc -m64 -mcx16 /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmppa5_621j/testfile.c -o /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmppa5_621j/output.obj -c -Wno-error -D_FILE_OFFSET_BITS=64 -O0 -std=gnu11` -> 0
+Header "sys/inotify.h" has symbol "inotify_init" : YES 
+Running compile:
+Working directory:  /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmppgk7xsfs
+Code:
+ 
+        #include <sys/inotify.h>
+        int main(void) {
+            /* If it's not defined as a macro, try to use as a symbol */
+            #ifndef inotify_init1
+                inotify_init1;
+            #endif
+            return 0;
+        }
+-----------
+Command line: `cc -m64 -mcx16 /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmppgk7xsfs/testfile.c -o /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmppgk7xsfs/output.obj -c -Wno-error -D_FILE_OFFSET_BITS=64 -O0 -std=gnu11` -> 0
+Header "sys/inotify.h" has symbol "inotify_init1" : YES 
+Running compile:
+Working directory:  /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmp7z_conb7
+Code:
+ #include <sys/endian.h>
+                                                     #include <sys/types.h>
+        #include <machine/bswap.h>
+        int main(void) {
+            /* If it's not defined as a macro, try to use as a symbol */
+            #ifndef bswap32
+                bswap32;
+            #endif
+            return 0;
+        }
+-----------
+Command line: `cc -m64 -mcx16 /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmp7z_conb7/testfile.c -o /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmp7z_conb7/output.obj -c -Wno-error -D_FILE_OFFSET_BITS=64 -O0 -std=gnu11` -> 1
+stderr:
+/data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmp7z_conb7/testfile.c:1:10: fatal error: sys/endian.h: No such file or directory
+    1 | #include <sys/endian.h>
+      |          ^~~~~~~~~~~~~~
+compilation terminated.
+-----------
+Header "machine/bswap.h" has symbol "bswap32" : NO 
+Running compile:
+Working directory:  /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmp7a6vcxql
+Code:
+ 
+        #include <sys/prctl.h>
+        int main(void) {
+            /* If it's not defined as a macro, try to use as a symbol */
+            #ifndef PR_SET_TIMERSLACK
+                PR_SET_TIMERSLACK;
+            #endif
+            return 0;
+        }
+-----------
+Command line: `cc -m64 -mcx16 /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmp7a6vcxql/testfile.c -o /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmp7a6vcxql/output.obj -c -Wno-error -D_FILE_OFFSET_BITS=64 -O0 -std=gnu11` -> 0
+Header "sys/prctl.h" has symbol "PR_SET_TIMERSLACK" : YES 
+Running compile:
+Working directory:  /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmp9gdpuymm
+Code:
+ 
+        #include <linux/rtnetlink.h>
+        int main(void) {
+            /* If it's not defined as a macro, try to use as a symbol */
+            #ifndef IFLA_PROTO_DOWN
+                IFLA_PROTO_DOWN;
+            #endif
+            return 0;
+        }
+-----------
+Command line: `cc -m64 -mcx16 /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmp9gdpuymm/testfile.c -o /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmp9gdpuymm/output.obj -c -Wno-error -D_FILE_OFFSET_BITS=64 -O0 -std=gnu11` -> 0
+Header "linux/rtnetlink.h" has symbol "IFLA_PROTO_DOWN" : YES 
+Running compile:
+Working directory:  /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpvd_jz0b9
+Code:
+ 
+        #include <sys/sysmacros.h>
+        int main(void) {
+            /* If it's not defined as a macro, try to use as a symbol */
+            #ifndef makedev
+                makedev;
+            #endif
+            return 0;
+        }
+-----------
+Command line: `cc -m64 -mcx16 /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpvd_jz0b9/testfile.c -o /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpvd_jz0b9/output.obj -c -Wno-error -D_FILE_OFFSET_BITS=64 -O0 -std=gnu11` -> 0
+Header "sys/sysmacros.h" has symbol "makedev" : YES 
+Running compile:
+Working directory:  /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpoejpypdm
+Code:
+ 
+        #include <getopt.h>
+        int main(void) {
+            /* If it's not defined as a macro, try to use as a symbol */
+            #ifndef optreset
+                optreset;
+            #endif
+            return 0;
+        }
+-----------
+Command line: `cc -m64 -mcx16 /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpoejpypdm/testfile.c -o /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpoejpypdm/output.obj -c -Wno-error -D_FILE_OFFSET_BITS=64 -O0 -std=gnu11` -> 1
+stderr:
+/data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpoejpypdm/testfile.c: In function 'main':
+/data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpoejpypdm/testfile.c:6:17: error: 'optreset' undeclared (first use in this function)
+    6 |                 optreset;
+      |                 ^~~~~~~~
+/data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpoejpypdm/testfile.c:6:17: note: each undeclared identifier is reported only once for each function it appears in
+-----------
+Header "getopt.h" has symbol "optreset" : NO 
+Running compile:
+Working directory:  /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmp9tbhm4kk
+Code:
+ 
+        #include <netinet/in.h>
+        int main(void) {
+            /* If it's not defined as a macro, try to use as a symbol */
+            #ifndef IPPROTO_MPTCP
+                IPPROTO_MPTCP;
+            #endif
+            return 0;
+        }
+-----------
+Command line: `cc -m64 -mcx16 /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmp9tbhm4kk/testfile.c -o /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmp9tbhm4kk/output.obj -c -Wno-error -D_FILE_OFFSET_BITS=64 -O0 -std=gnu11` -> 0
+Header "netinet/in.h" has symbol "IPPROTO_MPTCP" : YES 
+Running compile:
+Working directory:  /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmp00rrlz48
+Code:
+ #include <signal.h>
+        void bar(void) {
+            struct sigevent foo;
+            foo.sigev_notify_thread_id;
+
+        }
+-----------
+Command line: `cc -m64 -mcx16 /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmp00rrlz48/testfile.c -o /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmp00rrlz48/output.obj -c -Wno-error -D_FILE_OFFSET_BITS=64 -O0 -std=gnu11` -> 1
+stderr:
+/data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmp00rrlz48/testfile.c: In function 'bar':
+/data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmp00rrlz48/testfile.c:4:16: error: 'struct sigevent' has no member named 'sigev_notify_thread_id'
+    4 |             foo.sigev_notify_thread_id;
+      |                ^
+-----------
+Checking whether type "struct sigevent" has member "sigev_notify_thread_id" : NO 
+Running compile:
+Working directory:  /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpqc2zyjfp
+Code:
+ #include <sys/stat.h>
+        void bar(void) {
+            struct stat foo;
+            foo.st_atim;
+
+        }
+-----------
+Command line: `cc -m64 -mcx16 /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpqc2zyjfp/testfile.c -o /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpqc2zyjfp/output.obj -c -Wno-error -D_FILE_OFFSET_BITS=64 -O0 -std=gnu11` -> 0
+Checking whether type "struct stat" has member "st_atim" : YES 
+Running compile:
+Working directory:  /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpjppj67dr
+Code:
+ #include <sys/uio.h>
+        void bar(void) {
+            sizeof(struct iovec);
+        }
+-----------
+Command line: `cc -m64 -mcx16 /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpjppj67dr/testfile.c -o /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpjppj67dr/output.obj -c -Wno-error -D_FILE_OFFSET_BITS=64 -O0 -std=gnu11` -> 0
+Checking for type "struct iovec" : YES 
+Running compile:
+Working directory:  /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpqhtlpnhe
+Code:
+ #include <utmpx.h>
+        void bar(void) {
+            sizeof(struct utmpx);
+        }
+-----------
+Command line: `cc -m64 -mcx16 /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpqhtlpnhe/testfile.c -o /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpqhtlpnhe/output.obj -c -Wno-error -D_FILE_OFFSET_BITS=64 -O0 -std=gnu11` -> 0
+Checking for type "struct utmpx" : YES 
+Running compile:
+Working directory:  /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpf4cubijc
+Code:
+ 
+  #include <sys/eventfd.h>
+  int main(void) { return eventfd(0, EFD_NONBLOCK | EFD_CLOEXEC); }
+-----------
+Command line: `cc -m64 -mcx16 /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpf4cubijc/testfile.c -o /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpf4cubijc/output.exe -Wno-error -D_FILE_OFFSET_BITS=64 -O0 -std=gnu11` -> 0
+Running compile:
+Working directory:  /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpnq7ny34t
+Code:
+ 
+  #ifndef _GNU_SOURCE
+  #define _GNU_SOURCE
+  #endif
+
+  #include <unistd.h>
+  int main(void) {
+  #if defined(_POSIX_SYNCHRONIZED_IO) && _POSIX_SYNCHRONIZED_IO > 0
+  return fdatasync(0);
+  #else
+  #error Not supported
+  #endif
+  }
+-----------
+Command line: `cc -m64 -mcx16 /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpnq7ny34t/testfile.c -o /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpnq7ny34t/output.exe -Wno-error -D_FILE_OFFSET_BITS=64 -O0 -std=gnu11` -> 0
+Running compile:
+Working directory:  /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmph0dbkpjj
+Code:
+ 
+  #ifndef _GNU_SOURCE
+  #define _GNU_SOURCE
+  #endif
+
+  #include <sys/types.h>
+  #include <sys/mman.h>
+  #include <stddef.h>
+  int main(void) { return madvise(NULL, 0, MADV_DONTNEED); }
+-----------
+Command line: `cc -m64 -mcx16 /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmph0dbkpjj/testfile.c -o /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmph0dbkpjj/output.exe -Wno-error -D_FILE_OFFSET_BITS=64 -O0 -std=gnu11` -> 0
+Running compile:
+Working directory:  /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpkvnfth2c
+Code:
+ 
+  #ifndef _GNU_SOURCE
+  #define _GNU_SOURCE
+  #endif
+
+  #include <sys/mman.h>
+  int main(void) { return memfd_create("foo", MFD_ALLOW_SEALING); }
+-----------
+Command line: `cc -m64 -mcx16 /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpkvnfth2c/testfile.c -o /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpkvnfth2c/output.exe -Wno-error -D_FILE_OFFSET_BITS=64 -O0 -std=gnu11` -> 0
+Running compile:
+Working directory:  /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpod9irnjo
+Code:
+ 
+  #ifndef _GNU_SOURCE
+  #define _GNU_SOURCE
+  #endif
+
+  #include <fcntl.h>
+  #if !defined(AT_EMPTY_PATH)
+  # error missing definition
+  #else
+  int main(void) { struct file_handle fh; return open_by_handle_at(0, &fh, 0); }
+  #endif
+-----------
+Command line: `cc -m64 -mcx16 /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpod9irnjo/testfile.c -o /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpod9irnjo/output.exe -Wno-error -D_FILE_OFFSET_BITS=64 -O0 -std=gnu11` -> 0
+Running compile:
+Working directory:  /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpmt3woy03
+Code:
+ 
+  #ifndef _GNU_SOURCE
+  #define _GNU_SOURCE
+  #endif
+
+  #include <unistd.h>
+  #include <fcntl.h>
+
+  int main(void)
+  {
+      int pipefd[2];
+      return pipe2(pipefd, O_CLOEXEC);
+  }
+-----------
+Command line: `cc -m64 -mcx16 /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpmt3woy03/testfile.c -o /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpmt3woy03/output.exe -Wno-error -D_FILE_OFFSET_BITS=64 -O0 -std=gnu11` -> 0
+Running compile:
+Working directory:  /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmp97otg7dg
+Code:
+ 
+  #ifndef _GNU_SOURCE
+  #define _GNU_SOURCE
+  #endif
+
+  #include <sys/mman.h>
+  #include <stddef.h>
+  int main(void) { return posix_madvise(NULL, 0, POSIX_MADV_DONTNEED); }
+-----------
+Command line: `cc -m64 -mcx16 /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmp97otg7dg/testfile.c -o /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmp97otg7dg/output.exe -Wno-error -D_FILE_OFFSET_BITS=64 -O0 -std=gnu11` -> 0
+Running compile:
+Working directory:  /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpl30jyjd_
+Code:
+ 
+  #ifndef _GNU_SOURCE
+  #define _GNU_SOURCE
+  #endif
+
+  #include <pthread.h>
+
+  static void *f(void *p) { return NULL; }
+  int main(void)
+  {
+    pthread_t thread;
+    pthread_create(&thread, 0, f, 0);
+    pthread_setname_np(thread, "QEMU");
+    return 0;
+  }
+-----------
+Command line: `cc -m64 -mcx16 /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpl30jyjd_/testfile.c -o /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpl30jyjd_/output.exe -pthread -Wno-error -D_FILE_OFFSET_BITS=64 -O0 -std=gnu11` -> 0
+Running compile:
+Working directory:  /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpnnj923gw
+Code:
+ 
+  #ifndef _GNU_SOURCE
+  #define _GNU_SOURCE
+  #endif
+
+  #include <pthread.h>
+
+  static void *f(void *p) { pthread_setname_np("QEMU"); return NULL; }
+  int main(void)
+  {
+    pthread_t thread;
+    pthread_create(&thread, 0, f, 0);
+    return 0;
+  }
+-----------
+Command line: `cc -m64 -mcx16 /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpnnj923gw/testfile.c -o /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpnnj923gw/output.exe -pthread -Wno-error -D_FILE_OFFSET_BITS=64 -O0 -std=gnu11` -> 1
+stderr:
+/data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpnnj923gw/testfile.c: In function 'f':
+/data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpnnj923gw/testfile.c:8:48: warning: passing argument 1 of 'pthread_setname_np' makes integer from pointer without a cast [-Wint-conversion]
+    8 |   static void *f(void *p) { pthread_setname_np("QEMU"); return NULL; }
+      |                                                ^~~~~~
+      |                                                |
+      |                                                char *
+In file included from /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpnnj923gw/testfile.c:6:
+/usr/include/pthread.h:463:42: note: expected 'pthread_t' {aka 'long unsigned int'} but argument is of type 'char *'
+  463 | extern int pthread_setname_np (pthread_t __target_thread, const char *__name)
+      |                                ~~~~~~~~~~^~~~~~~~~~~~~~~
+/data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpnnj923gw/testfile.c:8:29: error: too few arguments to function 'pthread_setname_np'
+    8 |   static void *f(void *p) { pthread_setname_np("QEMU"); return NULL; }
+      |                             ^~~~~~~~~~~~~~~~~~
+/usr/include/pthread.h:463:12: note: declared here
+  463 | extern int pthread_setname_np (pthread_t __target_thread, const char *__name)
+      |            ^~~~~~~~~~~~~~~~~~
+-----------
+Running compile:
+Working directory:  /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpcxp96ndr
+Code:
+ 
+  #ifndef _GNU_SOURCE
+  #define _GNU_SOURCE
+  #endif
+
+  #include <sys/signalfd.h>
+  #include <stddef.h>
+  int main(void) { return signalfd(-1, NULL, SFD_CLOEXEC); }
+-----------
+Command line: `cc -m64 -mcx16 /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpcxp96ndr/testfile.c -o /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpcxp96ndr/output.exe -Wno-error -D_FILE_OFFSET_BITS=64 -O0 -std=gnu11` -> 0
+stderr:
+/data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpcxp96ndr/testfile.c: In function 'main':
+/data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpcxp96ndr/testfile.c:8:27: warning: argument 2 null where non-null expected [-Wnonnull]
+    8 |   int main(void) { return signalfd(-1, NULL, SFD_CLOEXEC); }
+      |                           ^~~~~~~~
+In file included from /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpcxp96ndr/testfile.c:6:
+/usr/include/x86_64-linux-gnu/sys/signalfd.h:57:12: note: in a call to function 'signalfd' declared 'nonnull'
+   57 | extern int signalfd (int __fd, const sigset_t *__mask, int __flags)
+      |            ^~~~~~~~
+-----------
+Running compile:
+Working directory:  /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmplo72kcrd
+Code:
+ 
+  #ifndef _GNU_SOURCE
+  #define _GNU_SOURCE
+  #endif
+
+  #include <unistd.h>
+  #include <fcntl.h>
+  #include <limits.h>
+
+  int main(void)
+  {
+    int len, fd = 0;
+    len = tee(STDIN_FILENO, STDOUT_FILENO, INT_MAX, SPLICE_F_NONBLOCK);
+    splice(STDIN_FILENO, NULL, fd, NULL, len, SPLICE_F_MOVE);
+    return 0;
+  }
+-----------
+Command line: `cc -m64 -mcx16 /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmplo72kcrd/testfile.c -o /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmplo72kcrd/output.exe -Wno-error -D_FILE_OFFSET_BITS=64 -O0 -std=gnu11` -> 0
+Running compile:
+Working directory:  /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpr6yaivuj
+Code:
+ 
+  #ifndef _GNU_SOURCE
+  #define _GNU_SOURCE
+  #endif
+
+  #include <sys/mman.h>
+  int main(int argc, char *argv[]) {
+    return mlockall(MCL_FUTURE);
+  }
+-----------
+Command line: `cc -m64 -mcx16 /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpr6yaivuj/testfile.c -o /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpr6yaivuj/output.exe -Wno-error -D_FILE_OFFSET_BITS=64 -O0 -std=gnu11` -> 0
+Running compile:
+Working directory:  /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpvh1vb72l
+Code:
+ 
+  #ifndef _GNU_SOURCE
+  #define _GNU_SOURCE
+  #endif
+
+      #include <sys/socket.h>
+      #include <linux/ip.h>
+        void bar(void) {
+            sizeof(struct mmsghdr);
+        }
+-----------
+Command line: `cc -m64 -mcx16 /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpvh1vb72l/testfile.c -o /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpvh1vb72l/output.obj -c -Wno-error -D_FILE_OFFSET_BITS=64 -O0 -std=gnu11` -> 0
+Checking for type "struct mmsghdr" : YES 
+Running compile:
+Working directory:  /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpv3lam6xt
+Code:
+ 
+    #include <inttypes.h>
+    #include <net/if.h>
+    #include <net/netmap.h>
+    #include <net/netmap_user.h>
+    #if (NETMAP_API < 11) || (NETMAP_API > 15)
+    #error
+    #endif
+    int main(void) { return 0; }
+-----------
+Command line: `cc -m64 -mcx16 /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpv3lam6xt/testfile.c -o /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpv3lam6xt/output.obj -c -Wno-error -D_FILE_OFFSET_BITS=64 -O0 -std=gnu11` -> 1
+stderr:
+/data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpv3lam6xt/testfile.c:4:14: fatal error: net/netmap.h: No such file or directory
+    4 |     #include <net/netmap.h>
+      |              ^~~~~~~~~~~~~~
+compilation terminated.
+-----------
+Running compile:
+Working directory:  /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmp8o27v_1x
+Code:
+ 
+  #include <linux/fs.h>
+  struct fsxattr foo;
+  int main(void) {
+    return 0;
+  }
+-----------
+Command line: `cc -m64 -mcx16 /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmp8o27v_1x/testfile.c -o /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmp8o27v_1x/output.exe -Wno-error -D_FILE_OFFSET_BITS=64 -O0 -std=gnu11` -> 0
+Running compile:
+Working directory:  /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpf41wc307
+Code:
+ 
+    #include <stdint.h>
+    #include <stdio.h>
+    int main(int argc, char *argv[]) {
+        return printf("%zu", SIZE_MAX);
+    }
+-----------
+Command line: `cc -m64 -mcx16 /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpf41wc307/testfile.c -o /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpf41wc307/output.obj -c -Wno-error -D_FILE_OFFSET_BITS=64 -O0 -std=gnu11 -Werror` -> 0
+Running compile:
+Working directory:  /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpkekurf9e
+Code:
+ 
+  #include <stdint.h>
+  int main(void)
+  {
+    uint64_t x = 0, y = 0;
+    y = __atomic_load_n(&x, __ATOMIC_RELAXED);
+    __atomic_store_n(&x, y, __ATOMIC_RELAXED);
+    __atomic_compare_exchange_n(&x, &y, x, 0, __ATOMIC_RELAXED, __ATOMIC_RELAXED);
+    __atomic_exchange_n(&x, y, __ATOMIC_RELAXED);
+    __atomic_fetch_add(&x, y, __ATOMIC_RELAXED);
+    return 0;
+  }
+-----------
+Command line: `cc -m64 -mcx16 /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpkekurf9e/testfile.c -o /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpkekurf9e/output.exe -Wno-error -D_FILE_OFFSET_BITS=64 -O0 -std=gnu11` -> 0
+Running compile:
+Working directory:  /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmp4rog_tga
+Code:
+ 
+  #ifndef _GNU_SOURCE
+  #define _GNU_SOURCE
+  #endif
+
+  #include <sys/auxv.h>
+  int main(void) {
+    return getauxval(AT_HWCAP) == 0;
+  }
+-----------
+Command line: `cc -m64 -mcx16 /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmp4rog_tga/testfile.c -o /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmp4rog_tga/output.exe -Wno-error -D_FILE_OFFSET_BITS=64 -O0 -std=gnu11` -> 0
+Running compile:
+Working directory:  /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpzqmu4kh9
+Code:
+ 
+  #ifndef _GNU_SOURCE
+  #define _GNU_SOURCE
+  #endif
+
+  #include <errno.h>
+  #include <sys/types.h>
+  #include <sys/socket.h>
+  #if !defined(AF_VSOCK)
+  # error missing AF_VSOCK flag
+  #endif
+  #include <linux/vm_sockets.h>
+  int main(void) {
+    int sock, ret;
+    struct sockaddr_vm svm;
+    socklen_t len = sizeof(svm);
+    sock = socket(AF_VSOCK, SOCK_STREAM, 0);
+    ret = getpeername(sock, (struct sockaddr *)&svm, &len);
+    if ((ret == -1) && (errno == ENOTCONN)) {
+        return 0;
+    }
+    return -1;
+  }
+-----------
+Command line: `cc -m64 -mcx16 /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpzqmu4kh9/testfile.c -o /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpzqmu4kh9/output.obj -c -Wno-error -D_FILE_OFFSET_BITS=64 -O0 -std=gnu11` -> 0
+Program scripts/minikconf.py found: YES (/usr/bin/python3 /data/dev/emulation/halucinator/deps/avatar-qemu/scripts/minikconf.py)
+Configuring ppc-softmmu-config-target.h using configuration
+Configuring ppc-softmmu-config-devices.mak with command
+Running command: /usr/bin/python3 /data/dev/emulation/halucinator/deps/avatar-qemu/scripts/minikconf.py --defconfig ppc-softmmu-config-devices.mak /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/ppc-softmmu-config-devices.mak.d /data/dev/emulation/halucinator/deps/avatar-qemu/configs/devices/ppc-softmmu/default.mak /data/dev/emulation/halucinator/deps/avatar-qemu/Kconfig CONFIG_TPM=y CONFIG_SPICE=y CONFIG_IVSHMEM=y CONFIG_OPENGL=y CONFIG_X11=y CONFIG_VHOST_USER=y CONFIG_VHOST_VDPA=y CONFIG_VHOST_KERNEL=y CONFIG_VIRTFS=y CONFIG_LINUX=y CONFIG_PVRDMA=y CONFIG_MULTIPROCESS_ALLOWED=y CONFIG_TCG=y CONFIG_PPC=y
+--- stdout ---
+CONFIG_AC97=y
+CONFIG_ACPI=y
+CONFIG_ACPI_CPU_HOTPLUG=y
+CONFIG_ACPI_HMAT=y
+CONFIG_ACPI_MEMORY_HOTPLUG=y
+CONFIG_ACPI_NVDIMM=y
+CONFIG_ACPI_PCIHP=y
+CONFIG_ACPI_PIIX4=y
+CONFIG_ACPI_SMBUS=y
+CONFIG_ACPI_X86=y
+CONFIG_ADB=y
+CONFIG_ADLIB=y
+CONFIG_AHCI=y
+CONFIG_AHCI_ICH9=y
+CONFIG_APM=y
+CONFIG_AT24C=y
+CONFIG_ATI_VGA=y
+CONFIG_BITBANG_I2C=y
+CONFIG_BOCHS_DISPLAY=y
+CONFIG_CAN_BUS=y
+CONFIG_CAN_CTUCANFD=y
+CONFIG_CAN_CTUCANFD_PCI=y
+CONFIG_CAN_PCI=y
+CONFIG_CAN_SJA1000=y
+CONFIG_CHRP_NVRAM=y
+CONFIG_CS4231A=y
+CONFIG_CUDA=y
+CONFIG_DDC=y
+CONFIG_DEC_PCI=y
+CONFIG_DS1338=y
+CONFIG_E1000E_PCI_EXPRESS=y
+CONFIG_E1000_PCI=y
+CONFIG_E500=y
+CONFIG_EDID=y
+CONFIG_EDU=y
+CONFIG_EEPRO100_PCI=y
+CONFIG_ES1370=y
+CONFIG_ESCC=y
+CONFIG_ESP=y
+CONFIG_ESP_PCI=y
+CONFIG_ETSEC=y
+CONFIG_FDC=y
+CONFIG_FDC_ISA=y
+CONFIG_FDT_PPC=y
+CONFIG_FSDEV_9P=y
+CONFIG_FW_CFG_PPC=y
+CONFIG_GENERIC_LOADER=y
+CONFIG_GRACKLE_PCI=y
+CONFIG_GUEST_LOADER=y
+CONFIG_GUS=y
+CONFIG_HDA=y
+CONFIG_HEATHROW_PIC=y
+CONFIG_I2C=y
+CONFIG_I82374=y
+CONFIG_I82378=y
+CONFIG_I8254=y
+CONFIG_I8257=y
+CONFIG_I8259=y
+CONFIG_I82801B11=y
+CONFIG_IDE_CORE=y
+CONFIG_IDE_ISA=y
+CONFIG_IDE_MACIO=y
+CONFIG_IDE_PCI=y
+CONFIG_IDE_QDEV=y
+CONFIG_IDE_SII3112=y
+CONFIG_IDE_VIA=y
+CONFIG_IMX_USBPHY=y
+CONFIG_IOH3420=y
+CONFIG_IPACK=y
+CONFIG_ISA_BUS=y
+CONFIG_ISA_SUPERIO=y
+CONFIG_ISA_TESTDEV=y
+CONFIG_IVSHMEM_DEVICE=y
+CONFIG_LSI_SCSI_PCI=y
+CONFIG_M41T80=y
+CONFIG_M48T59=y
+CONFIG_MACIO=y
+CONFIG_MACIO_GPIO=y
+CONFIG_MAC_DBDMA=y
+CONFIG_MAC_NEWWORLD=y
+CONFIG_MAC_NVRAM=y
+CONFIG_MAC_OLDWORLD=y
+CONFIG_MAC_PMU=y
+CONFIG_MC146818RTC=y
+CONFIG_MEGASAS_SCSI_PCI=y
+CONFIG_MEM_DEVICE=y
+CONFIG_MOS6522=y
+CONFIG_MPC_I2C=y
+CONFIG_MPTSAS_SCSI_PCI=y
+CONFIG_MSI_NONBROKEN=y
+CONFIG_MV64361=y
+CONFIG_NE2000_COMMON=y
+CONFIG_NE2000_ISA=y
+CONFIG_NE2000_PCI=y
+CONFIG_NMC93XX_EEPROM=y
+CONFIG_NVME_PCI=y
+CONFIG_OPENPIC=y
+CONFIG_OR_IRQ=y
+CONFIG_PARALLEL=y
+CONFIG_PC87312=y
+CONFIG_PCI=y
+CONFIG_PCIE_PORT=y
+CONFIG_PCI_DEVICES=y
+CONFIG_PCI_EXPRESS=y
+CONFIG_PCI_TESTDEV=y
+CONFIG_PCKBD=y
+CONFIG_PCNET_COMMON=y
+CONFIG_PCNET_PCI=y
+CONFIG_PCSPK=y
+CONFIG_PEGASOS2=y
+CONFIG_PFLASH_CFI01=y
+CONFIG_PFLASH_CFI02=y
+CONFIG_PLATFORM_BUS=y
+CONFIG_PPC405=y
+CONFIG_PPC440=y
+CONFIG_PPC4XX=y
+CONFIG_PPCE500_PCI=y
+CONFIG_PPC_UIC=y
+CONFIG_PREP=y
+CONFIG_PS2=y
+CONFIG_PTIMER=y
+CONFIG_PVPANIC_COMMON=y
+CONFIG_PVPANIC_PCI=y
+CONFIG_RAVEN_PCI=y
+CONFIG_ROCKER=y
+CONFIG_RS6000_MC=y
+CONFIG_RTL8139_PCI=y
+CONFIG_SAM460EX=y
+CONFIG_SB16=y
+CONFIG_SCSI=y
+CONFIG_SD=y
+CONFIG_SDHCI=y
+CONFIG_SDHCI_PCI=y
+CONFIG_SERIAL=y
+CONFIG_SERIAL_ISA=y
+CONFIG_SERIAL_PCI=y
+CONFIG_SERIAL_PCI_MULTI=y
+CONFIG_SM501=y
+CONFIG_SMBUS=y
+CONFIG_SMBUS_EEPROM=y
+CONFIG_SUNGEM=y
+CONFIG_TEST_DEVICES=y
+CONFIG_TULIP=y
+CONFIG_UNIN_PCI=y
+CONFIG_USB=y
+CONFIG_USB_AUDIO=y
+CONFIG_USB_EHCI=y
+CONFIG_USB_EHCI_PCI=y
+CONFIG_USB_EHCI_SYSBUS=y
+CONFIG_USB_NETWORK=y
+CONFIG_USB_OHCI=y
+CONFIG_USB_OHCI_PCI=y
+CONFIG_USB_SERIAL=y
+CONFIG_USB_SMARTCARD=y
+CONFIG_USB_STORAGE_BOT=y
+CONFIG_USB_STORAGE_CLASSIC=y
+CONFIG_USB_STORAGE_CORE=y
+CONFIG_USB_STORAGE_MTP=y
+CONFIG_USB_STORAGE_UAS=y
+CONFIG_USB_TABLET_WACOM=y
+CONFIG_USB_U2F=y
+CONFIG_USB_UHCI=y
+CONFIG_USB_XHCI=y
+CONFIG_USB_XHCI_NEC=y
+CONFIG_USB_XHCI_PCI=y
+CONFIG_VFIO=y
+CONFIG_VFIO_AMD_XGBE=y
+CONFIG_VFIO_PCI=y
+CONFIG_VFIO_PLATFORM=y
+CONFIG_VFIO_XGMAC=y
+CONFIG_VGA=y
+CONFIG_VGA_CIRRUS=y
+CONFIG_VGA_PCI=y
+CONFIG_VHOST=y
+CONFIG_VHOST_USER_BLK=y
+CONFIG_VHOST_USER_GPU=y
+CONFIG_VHOST_USER_I2C=y
+CONFIG_VHOST_USER_INPUT=y
+CONFIG_VHOST_USER_RNG=y
+CONFIG_VHOST_USER_SCSI=y
+CONFIG_VIRTEX=y
+CONFIG_VIRTIO=y
+CONFIG_VIRTIO_9P=y
+CONFIG_VIRTIO_BALLOON=y
+CONFIG_VIRTIO_BLK=y
+CONFIG_VIRTIO_CRYPTO=y
+CONFIG_VIRTIO_GPU=y
+CONFIG_VIRTIO_INPUT=y
+CONFIG_VIRTIO_INPUT_HOST=y
+CONFIG_VIRTIO_IOMMU=y
+CONFIG_VIRTIO_NET=y
+CONFIG_VIRTIO_PCI=y
+CONFIG_VIRTIO_RNG=y
+CONFIG_VIRTIO_SCSI=y
+CONFIG_VIRTIO_SERIAL=y
+CONFIG_VMWARE_VGA=y
+CONFIG_VMW_PVRDMA=y
+CONFIG_VMW_PVSCSI_SCSI_PCI=y
+CONFIG_VMXNET3_PCI=y
+CONFIG_VOF=y
+CONFIG_VT82C686=y
+CONFIG_WDT_IB6300ESB=y
+CONFIG_WDT_IB700=y
+CONFIG_XILINX=y
+CONFIG_XILINX_ETHLITE=y
+CONFIG_XIO3130=y
+
+--- stderr ---
+
+
+Reading depfile: /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/ppc-softmmu-config-devices.mak.d
+Configuring ppc-softmmu-config-devices.h using configuration
+Determining dependency 'capstone' with pkg-config executable '/usr/bin/pkg-config'
+env[PKG_CONFIG_PATH]: 
+env[PKG_CONFIG]: /usr/bin/pkg-config
+-----------
+Called: `/usr/bin/pkg-config --modversion capstone` -> 1
+stderr:
+Package capstone was not found in the pkg-config search path.
+Perhaps you should add the directory containing `capstone.pc'
+to the PKG_CONFIG_PATH environment variable
+Package 'capstone', required by 'virtual:world', not found
+-----------
+Run-time dependency capstone found: NO (tried pkgconfig)
+Configuring capstone-defs.h using configuration
+Determining dependency 'slirp' with pkg-config executable '/usr/bin/pkg-config'
+env[PKG_CONFIG_PATH]: 
+env[PKG_CONFIG]: /usr/bin/pkg-config
+-----------
+Called: `/usr/bin/pkg-config --modversion slirp` -> 0
+stdout:
+4.7.0
+-----------
+env[PKG_CONFIG_PATH]: 
+env[PKG_CONFIG]: /usr/bin/pkg-config
+-----------
+Called: `/usr/bin/pkg-config --cflags slirp` -> 0
+stdout:
+-I/usr/include/slirp -I/usr/include/glib-2.0 -I/usr/lib/x86_64-linux-gnu/glib-2.0/include
+-----------
+env[PKG_CONFIG_ALLOW_SYSTEM_LIBS]: 1
+env[PKG_CONFIG_PATH]: 
+env[PKG_CONFIG]: /usr/bin/pkg-config
+-----------
+Called: `/usr/bin/pkg-config --libs slirp` -> 0
+stdout:
+-L/usr/lib/x86_64-linux-gnu -lslirp -lglib-2.0
+-----------
+env[PKG_CONFIG_PATH]: 
+env[PKG_CONFIG]: /usr/bin/pkg-config
+-----------
+Called: `/usr/bin/pkg-config --libs slirp` -> 0
+stdout:
+-lslirp -lglib-2.0
+-----------
+Run-time dependency slirp found: YES 4.7.0
+Running compile:
+Working directory:  /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpxu_5cb51
+Code:
+ int main(void) { return 0; }
+
+-----------
+Command line: `cc -m64 -mcx16 /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpxu_5cb51/testfile.c -o /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpxu_5cb51/output.exe -Wno-error -D_FILE_OFFSET_BITS=64 -O0 -Wl,--start-group -lfdt -Wl,--end-group -Wl,--allow-shlib-undefined` -> 0
+Library fdt found: YES
+Running compile:
+Working directory:  /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpk164mdem
+Code:
+ 
+       #include <libfdt.h>
+       #include <libfdt_env.h>
+       int main(void) { fdt_check_full(NULL, 0); return 0; }
+-----------
+Command line: `cc -m64 -mcx16 /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpk164mdem/testfile.c -o /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpk164mdem/output.exe -Wno-error -D_FILE_OFFSET_BITS=64 -O0 -std=gnu11 -Wl,--start-group -lfdt -Wl,--end-group` -> 0
+Configuring config-host.h using configuration
+Program scripts/hxtool found: YES (/data/dev/emulation/halucinator/deps/avatar-qemu/scripts/hxtool)
+Program scripts/shaderinclude.pl found: YES (/usr/bin/env perl /data/dev/emulation/halucinator/deps/avatar-qemu/scripts/shaderinclude.pl)
+Program scripts/qapi-gen.py found: YES (/usr/bin/python3 /data/dev/emulation/halucinator/deps/avatar-qemu/scripts/qapi-gen.py)
+Program scripts/qemu-version.sh found: YES (/data/dev/emulation/halucinator/deps/avatar-qemu/scripts/qemu-version.sh)
+
+Executing subproject libvhost-user 
+
+Project name: libvhost-user
+Project version: undefined
+C compiler for the host machine: cc -m64 -mcx16 (gcc 13.3.0 "cc (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0")
+C linker for the host machine: cc -m64 -mcx16 ld.bfd 2.42
+C compiler for the build machine: cc -m64 -mcx16 (gcc 13.3.0 "cc (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0")
+C linker for the build machine: cc -m64 -mcx16 ld.bfd 2.42
+Dependency threads found: YES unknown (cached)
+Dependency glib-2.0 found: YES 6.2.0 (overridden)
+Build targets in project: 9
+Subproject libvhost-user finished.
+
+Program scripts/decodetree.py found: YES (/usr/bin/python3 /data/dev/emulation/halucinator/deps/avatar-qemu/scripts/decodetree.py)
+Program ../scripts/modules/module_block.py found: YES (/usr/bin/python3 /data/dev/emulation/halucinator/deps/avatar-qemu/block/../scripts/modules/module_block.py)
+Program ../scripts/block-coroutine-wrapper.py found: YES (/usr/bin/python3 /data/dev/emulation/halucinator/deps/avatar-qemu/block/../scripts/block-coroutine-wrapper.py)
+Program scripts/modinfo-collect.py found: YES (/data/dev/emulation/halucinator/deps/avatar-qemu/scripts/modinfo-collect.py)
+Program scripts/modinfo-generate.py found: YES (/data/dev/emulation/halucinator/deps/avatar-qemu/scripts/modinfo-generate.py)
+Program nm found: YES
+Program scripts/undefsym.py found: YES (/usr/bin/python3 /data/dev/emulation/halucinator/deps/avatar-qemu/scripts/undefsym.py)
+Program scripts/feature_to_c.sh found: YES (/bin/sh /data/dev/emulation/halucinator/deps/avatar-qemu/scripts/feature_to_c.sh)
+Running compile:
+Working directory:  /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpwctjdc9h
+Code:
+ int main(void) { return 0; }
+
+-----------
+Command line: `cc -m64 -mcx16 /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpwctjdc9h/testfile.c -o /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpwctjdc9h/output.exe -Wno-error -D_FILE_OFFSET_BITS=64 -O0 -Wl,--start-group -libumad -Wl,--end-group -Wl,--allow-shlib-undefined` -> 0
+Library ibumad found: YES
+Configuring 50-qemu-gpu.json using configuration
+Configuring 50-qemu-virtiofsd.json using configuration
+Program qemu-keymap found: NO
+Program cp found: YES (/usr/bin/cp)
+Program sphinx-build found: YES (/usr/bin/sphinx-build)
+WARNING: You should add the boolean check kwarg to the run_command call.
+         It currently defaults to false,
+         but it will default to true in future releases of meson.
+         See also: https://github.com/mesonbuild/meson/issues/9300
+Running command: /usr/bin/mkdir -p /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/temp/sphinx
+--- stdout ---
+
+--- stderr ---
+
+
+Running command: /usr/bin/touch /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/temp/sphinx/index.rst
+--- stdout ---
+
+--- stderr ---
+
+
+Running command: /usr/bin/env CONFDIR=/usr/local/etc/qemu /usr/bin/sphinx-build -q -W -c /data/dev/emulation/halucinator/deps/avatar-qemu/docs -b html /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/temp/sphinx /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/temp/sphinx/out
+--- stdout ---
+
+--- stderr ---
+
+Warning, treated as error:
+Invalid configuration value found: 'language = None'. Update your configuration to a valid language code. Falling back to 'en' (English).
+
+
+../../avatar-qemu/docs/meson.build:30: WARNING: /usr/bin/sphinx-build: 
+Warning, treated as error:
+Invalid configuration value found: 'language = None'. Update your configuration to a valid language code. Falling back to 'en' (English).
+
+Program python3 found: YES (/usr/bin/python3)
+Adding benchmark "benchmark-crypto-hash"
+Adding benchmark "benchmark-crypto-hmac"
+Adding benchmark "benchmark-crypto-cipher"
+Adding test "decodetree"
+Adding test "fp-test-float-to-float"
+Adding test "fp-test-int-to-float"
+Adding test "fp-test-uint-to-float"
+Adding test "fp-test-float-to-int"
+Adding test "fp-test-float-to-uint"
+Adding test "fp-test-round-to-integer"
+Adding test "fp-test-eq_signaling"
+Adding test "fp-test-le"
+Adding test "fp-test-le_quiet"
+Adding test "fp-test-lt_quiet"
+Adding test "fp-test-add"
+Adding test "fp-test-sub"
+Adding test "fp-test-mul"
+Adding test "fp-test-div"
+Adding test "fp-test-rem"
+Adding test "fp-test-sqrt"
+Adding test "fp-test-mulAdd"
+Adding test "fp-test-log2"
+Adding test "check-block-qdict"
+Adding test "check-qdict"
+Adding test "check-qnum"
+Adding test "check-qstring"
+Adding test "check-qlist"
+Adding test "check-qnull"
+Adding test "check-qobject"
+Adding test "check-qjson"
+Adding test "check-qlit"
+Adding test "test-qobject-output-visitor"
+Adding test "test-clone-visitor"
+Adding test "test-qobject-input-visitor"
+Adding test "test-forward-visitor"
+Adding test "test-string-input-visitor"
+Adding test "test-string-output-visitor"
+Adding test "test-opts-visitor"
+Adding test "test-visitor-serialization"
+Adding test "test-bitmap"
+Adding test "test-x86-cpuid"
+Adding test "test-cutils"
+Adding test "test-div128"
+Adding test "test-shift128"
+Adding test "test-mul64"
+Adding test "test-int128"
+Adding test "rcutorture"
+Adding test "test-rcu-list"
+Adding test "test-rcu-simpleq"
+Adding test "test-rcu-tailq"
+Adding test "test-rcu-slist"
+Adding test "test-qdist"
+Adding test "test-qht"
+Adding test "test-bitops"
+Adding test "test-bitcnt"
+Adding test "test-qgraph"
+Adding test "check-qom-interface"
+Adding test "check-qom-proplist"
+Adding test "test-qemu-opts"
+Adding test "test-keyval"
+Adding test "test-logging"
+Adding test "test-uuid"
+Adding test "ptimer-test"
+Adding test "test-qapi-util"
+Adding test "test-smp-parse"
+Adding test "test-qmp-event"
+Adding test "test-coroutine"
+Adding test "test-aio"
+Adding test "test-aio-multithread"
+Adding test "test-throttle"
+Adding test "test-thread-pool"
+Adding test "test-hbitmap"
+Adding test "test-bdrv-drain"
+Adding test "test-bdrv-graph-mod"
+Adding test "test-blockjob"
+Adding test "test-blockjob-txn"
+Adding test "test-block-backend"
+Adding test "test-block-iothread"
+Adding test "test-write-threshold"
+Adding test "test-crypto-hash"
+Adding test "test-crypto-hmac"
+Adding test "test-crypto-cipher"
+Adding test "test-crypto-secret"
+Adding test "test-authz-simple"
+Adding test "test-authz-list"
+Adding test "test-authz-listfile"
+Adding test "test-io-task"
+Adding test "test-io-channel-socket"
+Adding test "test-io-channel-file"
+Adding test "test-io-channel-command"
+Adding test "test-io-channel-buffer"
+Adding test "test-crypto-ivgen"
+Adding test "test-crypto-afsplit"
+Adding test "test-crypto-block"
+Adding test "test-crypto-tlscredsx509"
+Adding test "test-crypto-tlssession"
+Adding test "test-io-channel-tls"
+Adding test "test-image-locking"
+Adding test "test-replication"
+Adding test "test-iov"
+Adding test "test-qmp-cmds"
+Adding test "test-xbzrle"
+Adding test "test-timed-average"
+Adding test "test-util-sockets"
+Adding test "test-base64"
+Adding test "test-bufferiszero"
+Adding test "test-vmstate"
+Adding test "test-yank"
+Adding test "test-char"
+Adding test "test-qdev-global-props"
+Adding test "test-qga"
+Adding test "QAPI schema regression tests"
+Program diff found: YES (/usr/bin/diff)
+Program dbus-daemon found: YES (/usr/bin/dbus-daemon)
+Adding test "qtest-ppc/endianness-test"
+Adding test "qtest-ppc/m48t59-test"
+Adding test "qtest-ppc/boot-order-test"
+Adding test "qtest-ppc/prom-env-test"
+Adding test "qtest-ppc/boot-serial-test"
+Adding test "qtest-ppc/fuzz-megasas-test"
+Adding test "qtest-ppc/fuzz-virtio-scsi-test"
+Adding test "qtest-ppc/fuzz-sb16-test"
+Adding test "qtest-ppc/fuzz-sdcard-test"
+Adding test "qtest-ppc/cdrom-test"
+Adding test "qtest-ppc/device-introspect-test"
+Adding test "qtest-ppc/machine-none-test"
+Adding test "qtest-ppc/qmp-test"
+Adding test "qtest-ppc/qmp-cmd-test"
+Adding test "qtest-ppc/qom-test"
+Adding test "qtest-ppc/test-hmp"
+Adding test "qtest-ppc/qos-test"
+Program initrd-stress.sh found: YES (/data/dev/emulation/halucinator/deps/avatar-qemu/tests/migration/initrd-stress.sh)
+Program xgettext found: YES (/usr/bin/xgettext)
+Program msgfmt found: YES (/usr/bin/msgfmt)
+Program msginit found: YES (/usr/bin/msginit)
+Program msgmerge found: YES (/usr/bin/msgmerge)
+Program xgettext found: YES (/usr/bin/xgettext)
+Build targets in project: 437
+NOTICE: Future-deprecated features used:
+ * 0.60.0: {'install_subdir with empty directory'}
+ * 1.1.0: {'"boolean option" keyword argument "value" of type str'}
+
+qemu 6.2.0
+
+  Directories
+    Install prefix               : /usr/local
+    BIOS directory               : share/qemu
+    firmware path                : /usr/local/share/qemu-firmware
+    binary directory             : bin
+    library directory            : lib
+    module directory             : lib/qemu
+    libexec directory            : libexec
+    include directory            : include
+    config directory             : /usr/local/etc
+    local state directory        : /usr/local/var
+    Manual directory             : share/man
+    Doc directory                : /usr/local/share/doc
+    Build directory              : /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu
+    Source path                  : /data/dev/emulation/halucinator/deps/avatar-qemu
+    GIT submodules               : ui/keycodemapdb tests/fp/berkeley-testfloat-3 tests/fp/berkeley-softfloat-3 dtc capstone slirp
+
+  Host binaries
+    git                          : git
+    make                         : make
+    python                       : /usr/bin/python3 (version: 3.12)
+    sphinx-build                 : /usr/bin/sphinx-build
+    gdb                          : /usr/bin/gdb-multiarch
+    genisoimage                  : 
+    smbd                         : "/usr/sbin/smbd"
+
+  Configurable features
+    Documentation                : NO
+    system-mode emulation        : YES
+    user-mode emulation          : NO
+    block layer                  : YES
+    Install blobs                : YES
+    module support               : NO
+    fuzzing support              : NO
+    Audio drivers                : pa oss
+    Trace backends               : log
+    QOM debugging                : YES
+    vhost-kernel support         : YES
+    vhost-net support            : YES
+    vhost-crypto support         : YES
+    vhost-scsi support           : YES
+    vhost-vsock support          : YES
+    vhost-user support           : YES
+    vhost-user-blk server support: YES
+    vhost-user-fs support        : YES
+    vhost-vdpa support           : YES
+    build guest agent            : YES
+    avatar2 support              : YES
+
+  Compilation
+    host CPU                     : x86_64
+    host endianness              : little
+    C compiler                   : cc -m64 -mcx16
+    Host C compiler              : cc -m64 -mcx16
+    C++ compiler                 : c++ -m64 -mcx16
+    CFLAGS                       : -Wno-error -O2 -g
+    CXXFLAGS                     : -Wno-error -O2 -g
+    LDFLAGS                      : -Wno-error
+    QEMU_CFLAGS                  : -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=2 -D_GNU_SOURCE -D_FILE_OFFSET_BITS=64 -D_LARGEFILE_SOURCE -Wstrict-prototypes -Wredundant-decls -Wundef -Wwrite-strings -Wmissing-prototypes -fno-strict-aliasing -fno-common -fwrapv -Wold-style-declaration -Wold-style-definition -Wtype-limits -Wformat-security -Wformat-y2k -Winit-self -Wignored-qualifiers -Wempty-body -Wnested-externs -Wendif-labels -Wexpansion-to-defined -Wimplicit-fallthrough=2 -Wno-missing-include-dirs -Wno-shift-negative-value -Wno-psabi -fstack-protector-strong
+    QEMU_LDFLAGS                 : -Wl,--warn-common -Wl,-z,relro -Wl,-z,now  -fstack-protector-strong
+    profiler                     : NO
+    link-time optimization (LTO) : NO
+    PIE                          : YES
+    static build                 : NO
+    malloc trim support          : YES
+    membarrier                   : NO
+    debug stack usage            : NO
+    mutex debugging              : NO
+    memory allocator             : system
+    avx2 optimization            : YES
+    avx512f optimization         : NO
+    gprof enabled                : NO
+    gcov                         : NO
+    thread sanitizer             : NO
+    CFI support                  : NO
+    strip binaries               : YES
+    sparse                       : NO
+    mingw32 support              : NO
+    ppc tests                    : powerpc-linux-gnu-gcc
+
+  Targets and accelerators
+    KVM support                  : NO
+    HAX support                  : NO
+    HVF support                  : NO
+    WHPX support                 : NO
+    NVMM support                 : NO
+    Xen support                  : YES
+    xen ctrl version             : 41700
+    TCG support                  : YES
+    TCG backend                  : native (x86_64)
+    TCG plugins                  : YES
+    TCG debug enabled            : NO
+    target list                  : ppc-softmmu
+    default devices              : YES
+    out of process emulation     : YES
+
+  Block layer support
+    coroutine backend            : ucontext
+    coroutine pool               : YES
+    Block whitelist (rw)         : 
+    Block whitelist (ro)         : 
+    Use block whitelist in tools : NO
+    VirtFS support               : YES
+    build virtiofs daemon        : YES
+    Live block migration         : YES
+    replication support          : YES
+    bochs support                : YES
+    cloop support                : YES
+    dmg support                  : YES
+    qcow v1 support              : YES
+    vdi support                  : YES
+    vvfat support                : YES
+    qed support                  : YES
+    parallels support            : YES
+    FUSE exports                 : YES 3.14.0
+
+  Crypto
+    TLS priority                 : "NORMAL"
+    GNUTLS support               : YES 3.8.3
+      GNUTLS crypto              : YES
+    libgcrypt                    : NO
+    nettle                       : NO
+    crypto afalg                 : NO
+    rng-none                     : NO
+    Linux keyring                : YES
+
+  Dependencies
+    SDL support                  : YES
+    SDL image support            : NO
+    GTK support                  : YES
+    pixman                       : YES 0.42.2
+    VTE support                  : YES 0.76.0
+    slirp support                : YES 4.7.0
+    libtasn1                     : YES 4.19.0
+    PAM                          : NO
+    iconv support                : YES
+    curses support               : YES
+    virgl support                : YES 1.0.0
+    curl support                 : YES 8.5.0
+    Multipath support            : NO
+    VNC support                  : YES
+    VNC SASL support             : YES
+    VNC JPEG support             : YES 2.1.5
+    VNC PNG support              : YES 1.6.43
+    OSS support                  : YES
+    ALSA support                 : YES 1.2.11
+    PulseAudio support           : YES 16.1
+    JACK support                 : YES 0.126.0
+    brlapi support               : YES
+    vde support                  : NO
+    netmap support               : NO
+    l2tpv3 support               : YES
+    Linux AIO support            : YES
+    Linux io_uring support       : YES 2.5
+    ATTR/XATTR support           : YES
+    RDMA support                 : YES
+    PVRDMA support               : YES
+    fdt support                  : system
+    libcap-ng support            : YES
+    bpf support                  : NO
+    spice protocol support       : YES 0.14.3
+      spice server support       : YES 0.15.1
+    rbd support                  : YES
+    xfsctl support               : YES
+    smartcard support            : YES 2.8.0
+    U2F support                  : NO
+    libusb                       : YES 1.0.27
+    usb net redir                : YES 0.13.0
+    OpenGL support               : YES
+    GBM                          : YES 25.2.8-0ubuntu0.24.04.1
+    libiscsi support             : YES 1.19.0
+    libnfs support               : NO
+    seccomp support              : YES 2.5.5
+    GlusterFS support            : YES 7.11.1
+    TPM support                  : YES
+    libssh support               : YES
+    lzo support                  : NO
+    snappy support               : NO
+    bzip2 support                : YES
+    lzfse support                : NO
+    zstd support                 : YES 1.5.5
+    NUMA host support            : YES
+    libxml2                      : NO
+    capstone                     : internal
+    libpmem support              : YES 1.13.1
+    libdaxctl support            : NO
+    libudev                      : YES 255
+    FUSE lseek                   : YES
+    selinux                      : YES 3.5
+
+  Subprojects
+    libvhost-user                : YES
+
+  User defined options
+    Native files                 : config-meson.cross
+    bindir                       : /usr/local/bin
+    datadir                      : /usr/local/share
+    debug                        : true
+    includedir                   : /usr/local/include
+    libdir                       : /usr/local/lib
+    libexecdir                   : /usr/local/libexec
+    localedir                    : /usr/local/share/locale
+    localstatedir                : /usr/local/var
+    mandir                       : /usr/local/share/man
+    optimization                 : 2
+    prefix                       : /usr/local
+    strip                        : true
+    sysconfdir                   : /usr/local/etc
+    werror                       : true
+    b_coverage                   : false
+    b_lto                        : false
+    b_pie                        : true
+    audio_drv_list               : default
+    capstone                     : auto
+    cfi                          : false
+    default_devices              : true
+    docdir                       : /usr/local/share/doc
+    fdt                          : auto
+    qemu_firmwarepath            : /usr/local/share/qemu-firmware
+    qemu_suffix                  : qemu
+    slirp                        : auto
+    sphinx_build                 : 
+    tcg                          : enabled
+    trace_file                   : trace
+    xen                          : enabled
+
+Found ninja-1.11.1 at /usr/bin/ninja
+Running compile:
+Working directory:  /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpmmnjk7bn
+Code:
+ 
+-----------
+Command line: `cc -m64 -mcx16 /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpmmnjk7bn/testfile.c -o /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpmmnjk7bn/output.obj -c -Wno-error -D_FILE_OFFSET_BITS=64 -O0 --print-search-dirs` -> 0
+stdout:
+install: /usr/lib/gcc/x86_64-linux-gnu/13/
+programs: =/usr/libexec/gcc/x86_64-linux-gnu/13/:/usr/libexec/gcc/x86_64-linux-gnu/13/:/usr/libexec/gcc/x86_64-linux-gnu/:/usr/lib/gcc/x86_64-linux-gnu/13/:/usr/lib/gcc/x86_64-linux-gnu/:/usr/lib/gcc/x86_64-linux-gnu/13/../../../../x86_64-linux-gnu/bin/x86_64-linux-gnu/13/:/usr/lib/gcc/x86_64-linux-gnu/13/../../../../x86_64-linux-gnu/bin/x86_64-linux-gnu/:/usr/lib/gcc/x86_64-linux-gnu/13/../../../../x86_64-linux-gnu/bin/
+libraries: =/usr/lib/gcc/x86_64-linux-gnu/13/:/usr/lib/gcc/x86_64-linux-gnu/13/../../../../x86_64-linux-gnu/lib/x86_64-linux-gnu/13/:/usr/lib/gcc/x86_64-linux-gnu/13/../../../../x86_64-linux-gnu/lib/x86_64-linux-gnu/:/usr/lib/gcc/x86_64-linux-gnu/13/../../../../x86_64-linux-gnu/lib/../lib/:/usr/lib/gcc/x86_64-linux-gnu/13/../../../x86_64-linux-gnu/13/:/usr/lib/gcc/x86_64-linux-gnu/13/../../../x86_64-linux-gnu/:/usr/lib/gcc/x86_64-linux-gnu/13/../../../../lib/:/lib/x86_64-linux-gnu/13/:/lib/x86_64-linux-gnu/:/lib/../lib/:/usr/lib/x86_64-linux-gnu/13/:/usr/lib/x86_64-linux-gnu/:/usr/lib/../lib/:/usr/lib/gcc/x86_64-linux-gnu/13/../../../../x86_64-linux-gnu/lib/:/usr/lib/gcc/x86_64-linux-gnu/13/../../../:/lib/:/usr/lib/
+-----------
+Running compile:
+Working directory:  /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpbnopxoao
+Code:
+ int main(void) { return 0; }
+
+-----------
+Command line: `c++ -m64 -mcx16 /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpbnopxoao/testfile.cpp -o /data/dev/emulation/halucinator/deps/build-qemu/ppc-softmmu/meson-private/tmpbnopxoao/output.exe -Wno-error -D_FILE_OFFSET_BITS=64 -O0 -fpermissive -Wl,--start-group -lstdc++ -Wl,--end-group -Wl,--allow-shlib-undefined` -> 0
+Failed to guess install tag for /usr/local/share/qemu/trace-events-all
+Failed to guess install tag for /usr/local/share/qemu/keymaps/ar
+Failed to guess install tag for /usr/local/share/qemu/keymaps/bepo
+Failed to guess install tag for /usr/local/share/qemu/keymaps/cz
+Failed to guess install tag for /usr/local/share/qemu/keymaps/da
+Failed to guess install tag for /usr/local/share/qemu/keymaps/de
+Failed to guess install tag for /usr/local/share/qemu/keymaps/de-ch
+Failed to guess install tag for /usr/local/share/qemu/keymaps/en-gb
+Failed to guess install tag for /usr/local/share/qemu/keymaps/en-us
+Failed to guess install tag for /usr/local/share/qemu/keymaps/es
+Failed to guess install tag for /usr/local/share/qemu/keymaps/et
+Failed to guess install tag for /usr/local/share/qemu/keymaps/fi
+Failed to guess install tag for /usr/local/share/qemu/keymaps/fo
+Failed to guess install tag for /usr/local/share/qemu/keymaps/fr
+Failed to guess install tag for /usr/local/share/qemu/keymaps/fr-be
+Failed to guess install tag for /usr/local/share/qemu/keymaps/fr-ca
+Failed to guess install tag for /usr/local/share/qemu/keymaps/fr-ch
+Failed to guess install tag for /usr/local/share/qemu/keymaps/hr
+Failed to guess install tag for /usr/local/share/qemu/keymaps/hu
+Failed to guess install tag for /usr/local/share/qemu/keymaps/is
+Failed to guess install tag for /usr/local/share/qemu/keymaps/it
+Failed to guess install tag for /usr/local/share/qemu/keymaps/ja
+Failed to guess install tag for /usr/local/share/qemu/keymaps/lt
+Failed to guess install tag for /usr/local/share/qemu/keymaps/lv
+Failed to guess install tag for /usr/local/share/qemu/keymaps/mk
+Failed to guess install tag for /usr/local/share/qemu/keymaps/nl
+Failed to guess install tag for /usr/local/share/qemu/keymaps/no
+Failed to guess install tag for /usr/local/share/qemu/keymaps/pl
+Failed to guess install tag for /usr/local/share/qemu/keymaps/pt
+Failed to guess install tag for /usr/local/share/qemu/keymaps/pt-br
+Failed to guess install tag for /usr/local/share/qemu/keymaps/ru
+Failed to guess install tag for /usr/local/share/qemu/keymaps/th
+Failed to guess install tag for /usr/local/share/qemu/keymaps/tr
+Failed to guess install tag for /usr/local/share/icons/hicolor/16x16/apps/qemu.png
+Failed to guess install tag for /usr/local/share/icons/hicolor/24x24/apps/qemu.png
+Failed to guess install tag for /usr/local/share/icons/hicolor/32x32/apps/qemu.png
+Failed to guess install tag for /usr/local/share/icons/hicolor/48x48/apps/qemu.png
+Failed to guess install tag for /usr/local/share/icons/hicolor/64x64/apps/qemu.png
+Failed to guess install tag for /usr/local/share/icons/hicolor/128x128/apps/qemu.png
+Failed to guess install tag for /usr/local/share/icons/hicolor/256x256/apps/qemu.png
+Failed to guess install tag for /usr/local/share/icons/hicolor/512x512/apps/qemu.png
+Failed to guess install tag for /usr/local/share/icons/hicolor/32x32/apps/qemu.bmp
+Failed to guess install tag for /usr/local/share/icons/hicolor/scalable/apps/qemu.svg
+Failed to guess install tag for /usr/local/share/applications/qemu.desktop
+Failed to guess install tag for /usr/local/share/qemu/vhost-user/50-qemu-gpu.json
+Failed to guess install tag for /usr/local/share/qemu/vhost-user/50-qemu-virtiofsd.json
+Failed to guess install tag for /usr/local/share/qemu/bios.bin
+Failed to guess install tag for /usr/local/share/qemu/bios-256k.bin
+Failed to guess install tag for /usr/local/share/qemu/bios-microvm.bin
+Failed to guess install tag for /usr/local/share/qemu/qboot.rom
+Failed to guess install tag for /usr/local/share/qemu/sgabios.bin
+Failed to guess install tag for /usr/local/share/qemu/vgabios.bin
+Failed to guess install tag for /usr/local/share/qemu/vgabios-cirrus.bin
+Failed to guess install tag for /usr/local/share/qemu/vgabios-stdvga.bin
+Failed to guess install tag for /usr/local/share/qemu/vgabios-vmware.bin
+Failed to guess install tag for /usr/local/share/qemu/vgabios-qxl.bin
+Failed to guess install tag for /usr/local/share/qemu/vgabios-virtio.bin
+Failed to guess install tag for /usr/local/share/qemu/vgabios-ramfb.bin
+Failed to guess install tag for /usr/local/share/qemu/vgabios-bochs-display.bin
+Failed to guess install tag for /usr/local/share/qemu/vgabios-ati.bin
+Failed to guess install tag for /usr/local/share/qemu/openbios-sparc32
+Failed to guess install tag for /usr/local/share/qemu/openbios-sparc64
+Failed to guess install tag for /usr/local/share/qemu/openbios-ppc
+Failed to guess install tag for /usr/local/share/qemu/QEMU,tcx.bin
+Failed to guess install tag for /usr/local/share/qemu/QEMU,cgthree.bin
+Failed to guess install tag for /usr/local/share/qemu/pxe-e1000.rom
+Failed to guess install tag for /usr/local/share/qemu/pxe-eepro100.rom
+Failed to guess install tag for /usr/local/share/qemu/pxe-ne2k_pci.rom
+Failed to guess install tag for /usr/local/share/qemu/pxe-pcnet.rom
+Failed to guess install tag for /usr/local/share/qemu/pxe-rtl8139.rom
+Failed to guess install tag for /usr/local/share/qemu/pxe-virtio.rom
+Failed to guess install tag for /usr/local/share/qemu/efi-e1000.rom
+Failed to guess install tag for /usr/local/share/qemu/efi-eepro100.rom
+Failed to guess install tag for /usr/local/share/qemu/efi-ne2k_pci.rom
+Failed to guess install tag for /usr/local/share/qemu/efi-pcnet.rom
+Failed to guess install tag for /usr/local/share/qemu/efi-rtl8139.rom
+Failed to guess install tag for /usr/local/share/qemu/efi-virtio.rom
+Failed to guess install tag for /usr/local/share/qemu/efi-e1000e.rom
+Failed to guess install tag for /usr/local/share/qemu/efi-vmxnet3.rom
+Failed to guess install tag for /usr/local/share/qemu/qemu-nsis.bmp
+Failed to guess install tag for /usr/local/share/qemu/bamboo.dtb
+Failed to guess install tag for /usr/local/share/qemu/canyonlands.dtb
+Failed to guess install tag for /usr/local/share/qemu/petalogix-s3adsp1800.dtb
+Failed to guess install tag for /usr/local/share/qemu/petalogix-ml605.dtb
+Failed to guess install tag for /usr/local/share/qemu/multiboot.bin
+Failed to guess install tag for /usr/local/share/qemu/multiboot_dma.bin
+Failed to guess install tag for /usr/local/share/qemu/linuxboot.bin
+Failed to guess install tag for /usr/local/share/qemu/linuxboot_dma.bin
+Failed to guess install tag for /usr/local/share/qemu/kvmvapic.bin
+Failed to guess install tag for /usr/local/share/qemu/pvh.bin
+Failed to guess install tag for /usr/local/share/qemu/s390-ccw.img
+Failed to guess install tag for /usr/local/share/qemu/s390-netboot.img
+Failed to guess install tag for /usr/local/share/qemu/slof.bin
+Failed to guess install tag for /usr/local/share/qemu/skiboot.lid
+Failed to guess install tag for /usr/local/share/qemu/palcode-clipper
+Failed to guess install tag for /usr/local/share/qemu/u-boot.e500
+Failed to guess install tag for /usr/local/share/qemu/u-boot-sam460-20100605.bin
+Failed to guess install tag for /usr/local/share/qemu/qemu_vga.ndrv
+Failed to guess install tag for /usr/local/share/qemu/edk2-licenses.txt
+Failed to guess install tag for /usr/local/share/qemu/hppa-firmware.img
+Failed to guess install tag for /usr/local/share/qemu/opensbi-riscv32-generic-fw_dynamic.bin
+Failed to guess install tag for /usr/local/share/qemu/opensbi-riscv64-generic-fw_dynamic.bin
+Failed to guess install tag for /usr/local/share/qemu/opensbi-riscv32-generic-fw_dynamic.elf
+Failed to guess install tag for /usr/local/share/qemu/opensbi-riscv64-generic-fw_dynamic.elf
+Failed to guess install tag for /usr/local/share/qemu/npcm7xx_bootrom.bin
+Failed to guess install tag for /usr/local/share/qemu/keymaps/sl
+Failed to guess install tag for /usr/local/share/qemu/keymaps/sv
+Failed to guess install tag for /usr/local/var/dummy
+Failed to guess install tag for /usr/local/share/qemu/trace-events-all
+Failed to guess install tag for /usr/local/share/qemu/keymaps/ar
+Failed to guess install tag for /usr/local/share/qemu/keymaps/bepo
+Failed to guess install tag for /usr/local/share/qemu/keymaps/cz
+Failed to guess install tag for /usr/local/share/qemu/keymaps/da
+Failed to guess install tag for /usr/local/share/qemu/keymaps/de
+Failed to guess install tag for /usr/local/share/qemu/keymaps/de-ch
+Failed to guess install tag for /usr/local/share/qemu/keymaps/en-gb
+Failed to guess install tag for /usr/local/share/qemu/keymaps/en-us
+Failed to guess install tag for /usr/local/share/qemu/keymaps/es
+Failed to guess install tag for /usr/local/share/qemu/keymaps/et
+Failed to guess install tag for /usr/local/share/qemu/keymaps/fi
+Failed to guess install tag for /usr/local/share/qemu/keymaps/fo
+Failed to guess install tag for /usr/local/share/qemu/keymaps/fr
+Failed to guess install tag for /usr/local/share/qemu/keymaps/fr-be
+Failed to guess install tag for /usr/local/share/qemu/keymaps/fr-ca
+Failed to guess install tag for /usr/local/share/qemu/keymaps/fr-ch
+Failed to guess install tag for /usr/local/share/qemu/keymaps/hr
+Failed to guess install tag for /usr/local/share/qemu/keymaps/hu
+Failed to guess install tag for /usr/local/share/qemu/keymaps/is
+Failed to guess install tag for /usr/local/share/qemu/keymaps/it
+Failed to guess install tag for /usr/local/share/qemu/keymaps/ja
+Failed to guess install tag for /usr/local/share/qemu/keymaps/lt
+Failed to guess install tag for /usr/local/share/qemu/keymaps/lv
+Failed to guess install tag for /usr/local/share/qemu/keymaps/mk
+Failed to guess install tag for /usr/local/share/qemu/keymaps/nl
+Failed to guess install tag for /usr/local/share/qemu/keymaps/no
+Failed to guess install tag for /usr/local/share/qemu/keymaps/pl
+Failed to guess install tag for /usr/local/share/qemu/keymaps/pt
+Failed to guess install tag for /usr/local/share/qemu/keymaps/pt-br
+Failed to guess install tag for /usr/local/share/qemu/keymaps/ru
+Failed to guess install tag for /usr/local/share/qemu/keymaps/th
+Failed to guess install tag for /usr/local/share/qemu/keymaps/tr
+Failed to guess install tag for /usr/local/share/icons/hicolor/16x16/apps/qemu.png
+Failed to guess install tag for /usr/local/share/icons/hicolor/24x24/apps/qemu.png
+Failed to guess install tag for /usr/local/share/icons/hicolor/32x32/apps/qemu.png
+Failed to guess install tag for /usr/local/share/icons/hicolor/48x48/apps/qemu.png
+Failed to guess install tag for /usr/local/share/icons/hicolor/64x64/apps/qemu.png
+Failed to guess install tag for /usr/local/share/icons/hicolor/128x128/apps/qemu.png
+Failed to guess install tag for /usr/local/share/icons/hicolor/256x256/apps/qemu.png
+Failed to guess install tag for /usr/local/share/icons/hicolor/512x512/apps/qemu.png
+Failed to guess install tag for /usr/local/share/icons/hicolor/32x32/apps/qemu.bmp
+Failed to guess install tag for /usr/local/share/icons/hicolor/scalable/apps/qemu.svg
+Failed to guess install tag for /usr/local/share/applications/qemu.desktop
+Failed to guess install tag for /usr/local/share/qemu/vhost-user/50-qemu-gpu.json
+Failed to guess install tag for /usr/local/share/qemu/vhost-user/50-qemu-virtiofsd.json
+Failed to guess install tag for /usr/local/share/qemu/bios.bin
+Failed to guess install tag for /usr/local/share/qemu/bios-256k.bin
+Failed to guess install tag for /usr/local/share/qemu/bios-microvm.bin
+Failed to guess install tag for /usr/local/share/qemu/qboot.rom
+Failed to guess install tag for /usr/local/share/qemu/sgabios.bin
+Failed to guess install tag for /usr/local/share/qemu/vgabios.bin
+Failed to guess install tag for /usr/local/share/qemu/vgabios-cirrus.bin
+Failed to guess install tag for /usr/local/share/qemu/vgabios-stdvga.bin
+Failed to guess install tag for /usr/local/share/qemu/vgabios-vmware.bin
+Failed to guess install tag for /usr/local/share/qemu/vgabios-qxl.bin
+Failed to guess install tag for /usr/local/share/qemu/vgabios-virtio.bin
+Failed to guess install tag for /usr/local/share/qemu/vgabios-ramfb.bin
+Failed to guess install tag for /usr/local/share/qemu/vgabios-bochs-display.bin
+Failed to guess install tag for /usr/local/share/qemu/vgabios-ati.bin
+Failed to guess install tag for /usr/local/share/qemu/openbios-sparc32
+Failed to guess install tag for /usr/local/share/qemu/openbios-sparc64
+Failed to guess install tag for /usr/local/share/qemu/openbios-ppc
+Failed to guess install tag for /usr/local/share/qemu/QEMU,tcx.bin
+Failed to guess install tag for /usr/local/share/qemu/QEMU,cgthree.bin
+Failed to guess install tag for /usr/local/share/qemu/pxe-e1000.rom
+Failed to guess install tag for /usr/local/share/qemu/pxe-eepro100.rom
+Failed to guess install tag for /usr/local/share/qemu/pxe-ne2k_pci.rom
+Failed to guess install tag for /usr/local/share/qemu/pxe-pcnet.rom
+Failed to guess install tag for /usr/local/share/qemu/pxe-rtl8139.rom
+Failed to guess install tag for /usr/local/share/qemu/pxe-virtio.rom
+Failed to guess install tag for /usr/local/share/qemu/efi-e1000.rom
+Failed to guess install tag for /usr/local/share/qemu/efi-eepro100.rom
+Failed to guess install tag for /usr/local/share/qemu/efi-ne2k_pci.rom
+Failed to guess install tag for /usr/local/share/qemu/efi-pcnet.rom
+Failed to guess install tag for /usr/local/share/qemu/efi-rtl8139.rom
+Failed to guess install tag for /usr/local/share/qemu/efi-virtio.rom
+Failed to guess install tag for /usr/local/share/qemu/efi-e1000e.rom
+Failed to guess install tag for /usr/local/share/qemu/efi-vmxnet3.rom
+Failed to guess install tag for /usr/local/share/qemu/qemu-nsis.bmp
+Failed to guess install tag for /usr/local/share/qemu/bamboo.dtb
+Failed to guess install tag for /usr/local/share/qemu/canyonlands.dtb
+Failed to guess install tag for /usr/local/share/qemu/petalogix-s3adsp1800.dtb
+Failed to guess install tag for /usr/local/share/qemu/petalogix-ml605.dtb
+Failed to guess install tag for /usr/local/share/qemu/multiboot.bin
+Failed to guess install tag for /usr/local/share/qemu/multiboot_dma.bin
+Failed to guess install tag for /usr/local/share/qemu/linuxboot.bin
+Failed to guess install tag for /usr/local/share/qemu/linuxboot_dma.bin
+Failed to guess install tag for /usr/local/share/qemu/kvmvapic.bin
+Failed to guess install tag for /usr/local/share/qemu/pvh.bin
+Failed to guess install tag for /usr/local/share/qemu/s390-ccw.img
+Failed to guess install tag for /usr/local/share/qemu/s390-netboot.img
+Failed to guess install tag for /usr/local/share/qemu/slof.bin
+Failed to guess install tag for /usr/local/share/qemu/skiboot.lid
+Failed to guess install tag for /usr/local/share/qemu/palcode-clipper
+Failed to guess install tag for /usr/local/share/qemu/u-boot.e500
+Failed to guess install tag for /usr/local/share/qemu/u-boot-sam460-20100605.bin
+Failed to guess install tag for /usr/local/share/qemu/qemu_vga.ndrv
+Failed to guess install tag for /usr/local/share/qemu/edk2-licenses.txt
+Failed to guess install tag for /usr/local/share/qemu/hppa-firmware.img
+Failed to guess install tag for /usr/local/share/qemu/opensbi-riscv32-generic-fw_dynamic.bin
+Failed to guess install tag for /usr/local/share/qemu/opensbi-riscv64-generic-fw_dynamic.bin
+Failed to guess install tag for /usr/local/share/qemu/opensbi-riscv32-generic-fw_dynamic.elf
+Failed to guess install tag for /usr/local/share/qemu/opensbi-riscv64-generic-fw_dynamic.elf
+Failed to guess install tag for /usr/local/share/qemu/npcm7xx_bootrom.bin
+Failed to guess install tag for /usr/local/share/qemu/keymaps/sl
+Failed to guess install tag for /usr/local/share/qemu/keymaps/sv
+Failed to guess install tag for /usr/local/var/dummy

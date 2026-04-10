@@ -17,3 +17,10 @@ test/**/tmp
 !test/firmware-rehosting/**/*.elf
 *.map
 deps/build-qemu/*.vsix
+# Test output artifacts
+hal_out.txt
+test_out.txt
+Receiver.txt
+Sender.txt
+test/zephyr/zephyr_fs/storage/
+test/zephyr/zephyr_fs/vfs/

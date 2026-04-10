@@ -7,7 +7,8 @@ from __future__ import annotations
 import os
 from typing import Any, Dict, Iterator, Optional
 
-from avatar2 import ARM_CORTEX_M3, ARM, ARM64, MIPS32, PPC32, PPC64, PPC_MPC8544DS
+from avatar2 import ARM_CORTEX_M3, ARM, ARM64, PPC32, PPC64, PPC_MPC8544DS
+from avatar2.archs.mips import MIPS_BE
 import halucinator
 
 
@@ -53,7 +54,7 @@ def _get_halucinator_targets() -> Dict[str, Dict[str, Any]]:
             ),
         },
         "mips": {
-            "avatar_arch": MIPS32,
+            "avatar_arch": MIPS_BE,
             "qemu_target": MIPSQemuTarget,
             "qemu_env_var": "HALUCINATOR_QEMU_MIPS",
             "qemu_default_path": os.path.join(
