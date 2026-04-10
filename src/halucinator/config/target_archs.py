@@ -7,7 +7,7 @@ from __future__ import annotations
 import os
 from typing import Any, Dict, Iterator, Optional
 
-from avatar2 import ARM_CORTEX_M3, ARM, ARM64, PPC32, PPC_MPC8544DS
+from avatar2 import ARM_CORTEX_M3, ARM, ARM64, MIPS32, PPC32, PPC64, PPC_MPC8544DS
 import halucinator
 
 
@@ -22,7 +22,9 @@ def _get_halucinator_targets() -> Dict[str, Dict[str, Any]]:
         ARMQemuTarget,
         ARMv7mQemuTarget,
         ARM64QemuTarget,
+        MIPSQemuTarget,
         PowerPCQemuTarget,
+        PowerPC64QemuTarget,
     )
 
     return {
@@ -50,10 +52,18 @@ def _get_halucinator_targets() -> Dict[str, Dict[str, Any]]:
                 _QEMU_DEFAULT_LOC, "aarch64-softmmu/qemu-system-aarch64"
             ),
         },
+        "mips": {
+            "avatar_arch": MIPS32,
+            "qemu_target": MIPSQemuTarget,
+            "qemu_env_var": "HALUCINATOR_QEMU_MIPS",
+            "qemu_default_path": os.path.join(
+                _QEMU_DEFAULT_LOC, "mips-softmmu/qemu-system-mips"
+            ),
+        },
         "powerpc": {
             "avatar_arch": PPC32,
             "qemu_target": PowerPCQemuTarget,
-            "qemu_env_var": "HALUCINATOR_QEMU_POWERPC",
+            "qemu_env_var": "HALUCINATOR_QEMU_PPC",
             "qemu_default_path": os.path.join(
                 _QEMU_DEFAULT_LOC, "ppc-softmmu/qemu-system-ppc"
             ),
@@ -61,9 +71,17 @@ def _get_halucinator_targets() -> Dict[str, Dict[str, Any]]:
         "powerpc:MPC8XX": {
             "avatar_arch": PPC_MPC8544DS,
             "qemu_target": PowerPCQemuTarget,
-            "qemu_env_var": "HALUCINATOR_QEMU_POWERPC",
+            "qemu_env_var": "HALUCINATOR_QEMU_PPC",
             "qemu_default_path": os.path.join(
                 _QEMU_DEFAULT_LOC, "ppc-softmmu/qemu-system-ppc"
+            ),
+        },
+        "ppc64": {
+            "avatar_arch": PPC64,
+            "qemu_target": PowerPC64QemuTarget,
+            "qemu_env_var": "HALUCINATOR_QEMU_PPC64",
+            "qemu_default_path": os.path.join(
+                _QEMU_DEFAULT_LOC, "ppc64-softmmu/qemu-system-ppc64"
             ),
         },
     }

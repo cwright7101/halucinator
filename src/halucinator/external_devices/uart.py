@@ -67,6 +67,13 @@ def main() -> None:
                 break
             #d = {'id':args.id, 'data': data}
             uart.send_data(args.id, data)
+    except EOFError:
+        # stdin closed (e.g. /dev/null) — keep server alive for receiving
+        from threading import Event
+        try:
+            Event().wait()
+        except KeyboardInterrupt:
+            pass
     except KeyboardInterrupt:
         pass
     log.info("Shutting Down")

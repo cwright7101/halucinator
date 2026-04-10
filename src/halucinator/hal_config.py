@@ -156,7 +156,7 @@ class HALMachineConfig:
         cpu_model: str = "cortex-m3",
         entry_addr: Optional[int] = None,
         init_sp: Optional[int] = None,
-        gdb_exe: str = "arm-none-eabi-gdb",
+        gdb_exe: str = "gdb-multiarch",
         vector_base: int = 0x08000000,
         gdb_arch: Optional[str] = None,
         machine: Optional[str] = None,
