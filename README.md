@@ -1,106 +1,128 @@
 # HALucinator - Firmware rehosting through abstraction layer modeling.
 
-## Setup in a Docker
+## Supported Architectures
 
+- ARM Cortex-M (cortex-m3, cortex-m4, etc.)
+- ARM (full, e.g. arm926)
+- AARCH64
+- MIPS
+- PowerPC (PPC)
+- PowerPC 64 (PPC64)
 
-Clone this repo and submodules for avatar2 and qemu
-```
+## Setup in Docker
+
+Clone this repo and submodules for avatar2 and qemu:
+```bash
 git clone <this repo>
 git submodule update --init
 ```
-A recursive clone can be done, but QEMU will then pull a lot of submodules that may not be needed.
-QEMU's build process will pull the needed modules
+A recursive clone can be done, but QEMU will then pull a lot of submodules that
+may not be needed. QEMU's build process will pull the needed modules.
 
-Then run
-```
+Build and run:
+```bash
 docker build -t halucinator ./
-docker run --name halucinator --rm -i -t halucinator bash
-#Inside Docker container run
+docker run --name halucinator -it halucinator bash
+```
+Building the Docker image may take a while (QEMU builds for all architectures).
+
+Inside the container, start the UART peripheral device:
+```bash
 hal_dev_uart -i=1073811456
 ```
-Building the docker may take a while time
 
-In separate terminal run
-```
+In a separate terminal, exec into the same container and run the firmware:
+```bash
 docker exec -it halucinator bash
-#Inside docker container run
 ./test/STM32/example/run.sh
 ```
 
-You will eventually see in both terminals messages containing
+You will eventually see in both terminals messages containing:
 ```
  ****UART-Hyperterminal communication based on IT ****
  Enter 10 characters using keyboard :
 ```
 
-Enter 10 Characters in the first terminal running `hal_dev_uart` press enter
-should then see text echoed followed by.
+Enter 10 characters in the first terminal running `hal_dev_uart` and press
+enter. You should see the text echoed followed by:
 
 ```txt
  Example Finished
 ```
 
+To clean up: `docker rm halucinator`
+
 
 ## Setup in Virtual Environment
 
-Note:  This has been lightly tested on 20.04 and 22.04
+Tested on Ubuntu 20.04 and 22.04.
 
-1.  Install dependencies using `./install_deps.sh`
-
-1.  Create and activate a python3 virtual environment (You can use virtualmachine
-    wrapper but it is not required).  You often have to restart you terminal
-    after installing virutalmachine wrapper for below to work
-    ```
-       mkvirtualenv -p `which python3` halucinator
-    ```
-    If (halucinator) is not in your prompt use `workon halucinator`
-
-    Note: You may have to manually configure virtualenvwrapper. Or build you virtual environment using you preferred method
+1. Clone the repo and submodules:
     ```bash
-        pip3 install virtualenvwrapper
+    git clone <this repo>
+    git submodule update --init
     ```
-    Then add to `~/.bashrc` using your favorite editor and then run
-    `source ~/.bashrc`.  Replace `your username` in below
 
+2. Install system dependencies:
     ```bash
-    export VIRTUALENVWRAPPER_PYTHON=/usr/bin/python3
-    export WORKON_HOME=$HOME/.virtualenvs
-    export VIRTUALENVWRAPPER_VIRTUALENV=/home/<your username>/.local/bin/virtualenv
-    source ~/.local/bin/virtualenvwrapper.sh
+    ./install_deps.sh
     ```
 
-Get the repo and its immediate submodules
-```
-git clone <this repo>
-git submodule update --init
-```
-
-Activate you virtual environment
-```
-workon halucinator
-./setup.sh
-```
-
-1.  Simlink gdb-multiarch to arm-none-eabi-gdb
-    If you don't have arm-none-eabi-gdb on your path symlink gdb-multiarch to it.
-    It which was installed in step 1.  Just symlink it to `arm-none-eabi-gdb`
-
+3. Create and activate a Python 3 virtual environment:
     ```bash
-    sudo ln /usr/bin/gdb-multiarch /usr/bin/arm-none-eabi-gdb
+    python3 -m venv ~/.virtualenvs/halucinator
+    source ~/.virtualenvs/halucinator/bin/activate
     ```
+    Or if using virtualenvwrapper: `mkvirtualenv -p $(which python3) halucinator`
+
+4. Install HALucinator and build QEMU:
+    ```bash
+    ./setup.sh
+    ```
+    This installs avatar2, halucinator, and builds QEMU for all supported
+    architectures. QEMU builds take 20+ minutes the first time.
 
 ### Note on setting HALUCINATOR_QEMU_*
 
-You can override the QEMU that is used by HALucinator setting
+You can override the QEMU binary used by HALucinator by setting the
+appropriate environment variable for your target architecture:
 
 ```sh
 export HALUCINATOR_QEMU_ARM=<full path to your qemu-system-arm>
 export HALUCINATOR_QEMU_ARM64=<full path to your qemu-system-aarch64>
-export HALUCINATOR_QEMU_POWERPC=<>
+export HALUCINATOR_QEMU_MIPS=<full path to your qemu-system-mips>
+export HALUCINATOR_QEMU_PPC=<full path to your qemu-system-ppc>
+export HALUCINATOR_QEMU_PPC64=<full path to your qemu-system-ppc64>
 ```
 
-If using virtual environments thes can be set in the $VIRTUAL_ENV/bin/postactivate and
-removed in $VIRTUAL_ENV/bin/predeactivate
+If not set, HALucinator looks for QEMU in `deps/build-qemu/<arch>-softmmu/`.
+
+If using virtual environments these can be set in `$VIRTUAL_ENV/bin/postactivate`
+and removed in `$VIRTUAL_ENV/bin/predeactivate`.
+
+### Optional: GrammaTech GTIRB Support
+
+HALucinator includes utilities for binary analysis using
+[GTIRB](https://github.com/GrammaTech/gtirb) (coverage parsing, stack trace
+analysis). These are optional and only needed if you work with GTIRB IR files.
+
+```bash
+pip install gtirb gtirb-capstone gtirb-functions
+```
+
+This enables:
+- `halucinator.util.gtirb_common` — load and query GTIRB IR files
+- `halucinator.util.parse_coverage` — coverage analysis from execution traces
+- `halucinator.util.parse_stack_trace` — stack trace parsing with GTIRB symbols
+
+### Optional: Symbol Extraction with angr
+
+To auto-generate address files from ELF binaries:
+
+```bash
+pip install angr
+hal_make_addr -b <path_to_elf> -o addrs.yaml
+```
 
 ## Running
 
@@ -127,7 +149,7 @@ halucinator  -c=<memory_file.yaml> -c=<intercept_file.yaml> -c=<address_file.yam
 To give an idea how to use Halucinator an example is provided in `test/STM32/example`.
 
 #### Setup
-Note: This was done prior and the files are in the repo in `test/STM/example`.
+Note: This was done prior and the files are in the repo in `test/STM32/example`.
 If you just want to run the example without building it just go to Running UART Example below.
 
 This procedure should be followed for other binaries.
@@ -142,14 +164,14 @@ In list below after the colon (:) denotes the file/cmd .
 7. (Optional) create shell script to run it: `run.sh`
 
 Note: Symbols used in the address file can be created from an elf file with symbols
-using `hal_make_addrs` This requires installing angr in halucinator's virtual environment.
+using `hal_make_addr`. This requires installing angr in halucinator's virtual environment.
 This was used to create `Uart_Hyperterminal_IT_O0_addrs.yaml`
 
-To use it the first time you would. Install angr (e.g. `pip install angr` from
+To use it the first time you would install angr (e.g. `pip install angr` from
 the halucinator virtual environment)
 
 ```sh
-hal_make_addrs -b <path to elf file>
+hal_make_addr -b <path to elf file>
 ```
 
 #### Running UART Example
@@ -165,14 +187,14 @@ In separate terminal start halucinator with the firmware.
 
 ```bash
 workon halucinator
-<halucinator_repo_root>$./halucinator -c=test/STM32/example/Uart_Hyperterminal_IT_O0_config.yaml \
+halucinator -c=test/STM32/example/Uart_Hyperterminal_IT_O0_config.yaml \
   -c=test/STM32/example/Uart_Hyperterminal_IT_O0_addrs.yaml \
   -c=test/STM32/example/Uart_Hyperterminal_IT_O0_memory.yaml --log_blocks -n Uart_Example
 
-or
-<halucinator_repo_root>& test/STM32/example/run.sh
+# or use the convenience script:
+bash test/STM32/example/run.sh
 ```
-Note the --log_blocks and -n are optional.
+Note the `--log_blocks` and `-n` are optional.
 
 You will eventually see in both terminals messages containing
 ```
@@ -212,7 +234,7 @@ machine:   # Optional, describes qemu machine used in avatar entry optional defa
   init_sp: (None)<int>,     # Initial value for sp reg, Obtained from 0x0000_0000
                         # of memory named init_mem if it exists else memory
                         # named flash
-  gdb_exe: ('arm-none-eabi-gdb')<path> # Path to gdb to use
+  gdb_exe: ('gdb-multiarch')<path> # Path to gdb to use
 
 
 memories:  #List of the memories to add to the machine
@@ -286,3 +308,58 @@ passed in using -s. This is a csv file each line defining a symbol as shown belo
 ```csv
 symbol_name<str>, start_addr<int>, last_addr<int>
 ```
+
+## Testing
+
+HALucinator has a comprehensive test suite with 28,600+ tests achieving 84% code coverage.
+
+### Running Unit Tests
+
+```bash
+# Run all CI-safe tests
+PYTHONPATH=src:test/pytest/helpers python3 -m pytest test/pytest/ \
+  -m "not slow_zmq and not needs_root" \
+  -p no:timeout --tb=short
+
+# Run with coverage
+PYTHONPATH=src:test/pytest/helpers python3 -m pytest test/pytest/ \
+  -m "not slow_zmq and not needs_root" \
+  -p no:timeout --cov=halucinator --cov-report=term-missing
+```
+
+### Running E2e Firmware Tests
+
+These require a built QEMU (run `./build_qemu.sh` first) and the
+`HALUCINATOR_QEMU_ARM` environment variable set.
+
+```bash
+export HALUCINATOR_QEMU_ARM=<path to qemu-system-arm>
+bash ./test/STM32/example/run_test.bash
+bash ./test/zephyr/zephyr_fs/run_tests.bash
+bash ./test/zephyr/frdm_k64f_UART_Excellent_Test/run_tests.bash
+bash ./test/zephyr/olimex_stm32_h103_UART_Excellent_test/run_tests.bash
+bash ./test/firmware-rehosting/p2im-drone/run_tests.bash
+```
+
+### Test Markers
+
+Tests are categorized with pytest markers defined in `conftest.py`:
+
+- `slow_zmq`: Tests that use real zmq sockets/threads (may hang in combined runs)
+- `needs_root`: Tests that require root privileges (raw sockets, scapy)
+
+### CI/CD
+
+The GitHub Actions workflow (`.github/workflows/virtual-environment-tests.yml`)
+runs on every push and pull request to master. It builds QEMU (cached),
+runs all e2e firmware tests, and runs the full pytest suite with coverage.
+
+## Available BP Handler Families
+
+- **generic**: Common handlers (ReturnZero, SkipFunc, Counter, Timer, etc.)
+- **stm32f4**: STM32F4 HAL (UART, GPIO, SPI, ethernet, timers, WiFi)
+- **libopencm3**: libopencm3 (ADC, DMA, flash, GPIO, RCC, SPI, timer, USART)
+- **atmel_asf_v3**: Atmel ASF (contiki, ethernet, radio, SD/MMC, timers, USART)
+- **mbed**: Mbed OS (boot, serial, timer)
+- **vxworks**: VxWorks RTOS (boot, filesystem, ethernet, interrupts, scheduler, tasks)
+- **zephyr**: Zephyr RTOS (filesystem, UART)

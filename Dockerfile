@@ -65,11 +65,12 @@ RUN /root/halucinator/deps/avatar-qemu/configure --target-list=ppc64-softmmu
 RUN make all -j`nproc`
 
 WORKDIR  /root/halucinator
-RUN ln -s -T /usr/bin/gdb-multiarch /usr/bin/arm-none-eabi-gdb
 
 # Symlink so VSCode extensions can find halucinator at /halucinator/
-# (the extensions have /halucinator/extra_tools/ hardcoded)
 RUN ln -s /root/halucinator /halucinator
+
+# Generate bpdata.json for VSCode extensions
+RUN python3 extra_tools/parse_bp_handlers.py -s src/halucinator -o bpdata.json
 
 # Set QEMU environment variables
 ENV HALUCINATOR_QEMU_ARM="/root/halucinator/deps/build-qemu/arm-softmmu/qemu-system-arm"
@@ -80,9 +81,6 @@ ENV HALUCINATOR_QEMU_MIPS="/root/halucinator/deps/build-qemu/mips-softmmu/qemu-s
 
 # Target directory for user projects
 ENV TARGET="/home/haluser/project"
-
-# Generate bpdata.json for VSCode extensions
-RUN python3 extra_tools/parse_bp_handlers.py -s src/halucinator -o bpdata.json
 
 # Create haluser with sudo access for Docker workflows
 RUN useradd -u 20000 -m -s /bin/bash haluser && \
