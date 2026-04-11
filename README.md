@@ -19,12 +19,25 @@ git submodule update --init
 A recursive clone can be done, but QEMU will then pull a lot of submodules that
 may not be needed. QEMU's build process will pull the needed modules.
 
-Build and run:
+Build and run (defaults to Ubuntu 22.04):
 ```bash
 docker build -t halucinator ./
-docker run --name halucinator -it halucinator bash
+docker run --name halucinator -it --network=host halucinator bash
 ```
-Building the Docker image may take a while (QEMU builds for all architectures).
+
+To build on Ubuntu 24.04 instead:
+```bash
+docker build --build-arg UBUNTU_VERSION=24.04 -t halucinator:24.04 ./
+```
+
+Building the Docker image takes a while (~20 min for QEMU builds).
+
+The convenience script `run_hal_docker.sh` manages container lifecycle
+(start, attach to existing, mount project directories):
+```bash
+# Mount your project and run
+HAL_TARGET=/path/to/project ./run_hal_docker.sh
+```
 
 Inside the container, start the UART peripheral device:
 ```bash
@@ -55,32 +68,96 @@ To clean up: `docker rm halucinator`
 
 ## Setup in Virtual Environment
 
-Tested on Ubuntu 20.04 and 22.04.
+Tested on Ubuntu 22.04 and 24.04.
 
-1. Clone the repo and submodules:
-    ```bash
-    git clone <this repo>
-    git submodule update --init
-    ```
+### 1. Clone the repo and submodules
 
-2. Install system dependencies:
-    ```bash
-    ./install_deps.sh
-    ```
+```bash
+git clone <this repo>
+git submodule update --init
+```
 
-3. Create and activate a Python 3 virtual environment:
-    ```bash
-    python3 -m venv ~/.virtualenvs/halucinator
-    source ~/.virtualenvs/halucinator/bin/activate
-    ```
-    Or if using virtualenvwrapper: `mkvirtualenv -p $(which python3) halucinator`
+### 2. Install system dependencies
 
-4. Install HALucinator and build QEMU:
-    ```bash
-    ./setup.sh
-    ```
-    This installs avatar2, halucinator, and builds QEMU for all supported
-    architectures. QEMU builds take 20+ minutes the first time.
+**Ubuntu 22.04 (Jammy):**
+```bash
+sudo apt-get update
+echo "deb-src http://archive.ubuntu.com/ubuntu/ jammy main restricted universe multiverse" | sudo tee -a /etc/apt/sources.list
+echo "deb-src http://archive.ubuntu.com/ubuntu/ jammy-security main restricted universe multiverse" | sudo tee -a /etc/apt/sources.list
+sudo apt-get update
+sudo apt-get build-dep -y qemu
+sudo apt-get install -y \
+    build-essential ca-certificates cmake ninja-build g++ git vim wget \
+    python3 python3-pip python3-venv python3-tk \
+    gdb-multiarch gcc-arm-none-eabi binutils-arm-none-eabi \
+    libaio-dev libglib2.0-dev libpixman-1-dev pkg-config \
+    clang-format ethtool tcpdump
+```
+
+**Ubuntu 24.04 (Noble):**
+```bash
+sudo apt-get update
+echo "deb-src http://archive.ubuntu.com/ubuntu/ noble main restricted universe multiverse" | sudo tee -a /etc/apt/sources.list
+echo "deb-src http://archive.ubuntu.com/ubuntu/ noble-security main restricted universe multiverse" | sudo tee -a /etc/apt/sources.list
+sudo apt-get update
+sudo apt-get build-dep -y qemu
+sudo apt-get install -y \
+    build-essential ca-certificates cmake ninja-build g++ git vim wget \
+    python3 python3-pip python3-venv python3-tk \
+    gdb-multiarch gcc-arm-none-eabi binutils-arm-none-eabi \
+    libaio-dev libglib2.0-dev libpixman-1-dev pkg-config \
+    clang-format ethtool tcpdump
+```
+
+> **Note:** On Ubuntu 24.04, pip refuses to install packages outside a
+> virtual environment (PEP 668). Always use a venv as shown below.
+> The package `python-tk` was renamed to `python3-tk` starting in 22.04.
+
+**Optional cross-compilers** (for building multi-arch test firmware):
+```bash
+sudo apt-get install -y \
+    gcc-arm-linux-gnueabi gcc-aarch64-linux-gnu \
+    gcc-mips-linux-gnu gcc-powerpc-linux-gnu gcc-powerpc64-linux-gnu
+```
+
+### 3. Create and activate a Python virtual environment
+
+```bash
+python3 -m venv ~/.virtualenvs/halucinator
+source ~/.virtualenvs/halucinator/bin/activate
+```
+
+### 4. Install Python packages
+
+```bash
+pip install -e deps/avatar2/
+pip install -r src/requirements.txt
+pip install -e src
+pip install pytest-cov pytest-timeout  # for running tests
+```
+
+### 5. Build QEMU
+
+```bash
+./build_qemu.sh
+```
+
+This builds QEMU for ARM, ARM64, MIPS, PPC, and PPC64 (~20 min first time).
+
+### 6. Set environment variables
+
+```bash
+source activate.sh
+```
+
+Or set them manually:
+```bash
+export HALUCINATOR_QEMU_ARM=$(pwd)/deps/build-qemu/arm-softmmu/qemu-system-arm
+export HALUCINATOR_QEMU_ARM64=$(pwd)/deps/build-qemu/aarch64-softmmu/qemu-system-aarch64
+export HALUCINATOR_QEMU_MIPS=$(pwd)/deps/build-qemu/mips-softmmu/qemu-system-mips
+export HALUCINATOR_QEMU_PPC=$(pwd)/deps/build-qemu/ppc-softmmu/qemu-system-ppc
+export HALUCINATOR_QEMU_PPC64=$(pwd)/deps/build-qemu/ppc64-softmmu/qemu-system-ppc64
+```
 
 ### Note on setting HALUCINATOR_QEMU_*
 
@@ -123,6 +200,63 @@ To auto-generate address files from ELF binaries:
 pip install angr
 hal_make_addr -b <path_to_elf> -o addrs.yaml
 ```
+
+## VSCode Extension and Debug Adapter
+
+HALucinator includes a Debug Adapter Protocol (DAP) server for IDE-based
+debugging and VSCode extensions for breakpoint handler browsing.
+
+### Installing VSCode Extensions
+
+The extensions are distributed as `.vsix` files. If using Docker:
+
+```bash
+# Extract and install extensions from a running container
+./extra_tools/vscode-extension-installer.sh halucinator
+```
+
+This installs the GrammaTech GTIRB viewer, HALucinator project creator,
+and breakpoint handler browser extensions into your host VSCode.
+
+### Generating Handler Metadata
+
+The VSCode extensions use `bpdata.json` for breakpoint handler autocomplete.
+To regenerate it (e.g. after adding custom handlers):
+
+```bash
+python3 extra_tools/parse_bp_handlers.py -s src/halucinator -o bpdata.json
+```
+
+For projects with custom handler directories:
+```bash
+python3 extra_tools/add_handler_path.py -a /path/to/your/handlers
+python3 extra_tools/run_parse_handlers.py
+```
+
+### Debug Adapter Protocol (DAP)
+
+HALucinator's DAP server (port 34157) enables IDE debugging of emulated
+firmware. To use with VSCode, create `.vscode/launch.json`:
+
+```json
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "HALucinator Debug",
+      "type": "halucinator",
+      "request": "attach",
+      "host": "localhost",
+      "port": 34157
+    }
+  ]
+}
+```
+
+Start HALucinator in debug mode, then attach from VSCode. The DAP server
+provides execution control (continue, step, next), breakpoint management,
+register/memory inspection, and stack trace viewing through the GTIRB
+disassembly view.
 
 ## Running
 
@@ -351,8 +485,10 @@ Tests are categorized with pytest markers defined in `conftest.py`:
 ### CI/CD
 
 The GitHub Actions workflow (`.github/workflows/virtual-environment-tests.yml`)
-runs on every push and pull request to master. It builds QEMU (cached),
-runs all e2e firmware tests, and runs the full pytest suite with coverage.
+runs on every push and pull request to master. It tests on both Ubuntu 22.04
+and 24.04 in parallel, builds QEMU for all architectures (cached per OS),
+runs QEMU smoke tests, all e2e firmware tests (STM32, Zephyr, multi-arch),
+and the full pytest suite with coverage reporting.
 
 ## Available BP Handler Families
 
