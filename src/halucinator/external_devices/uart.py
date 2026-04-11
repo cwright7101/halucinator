@@ -41,8 +41,9 @@ def main() -> None:
                    help='Port number to receive zmq messages for IO on')
     p.add_argument('-t', '--tx_port', default=5555,
                    help='Port number to send IO messages via zmq')
-    p.add_argument('-i', '--id', default=0x20000ab0, type=int,
-                   help="Id to use when sending data")
+    p.add_argument('-i', '--id', default=0x20000ab0,
+                   type=lambda x: int(x, 0),
+                   help="Id to use when sending data (supports hex, e.g. 0x40013800)")
     p.add_argument('-n', '--newline', default=False, action='store_true',
                    help="Append Newline")
     args = p.parse_args()
