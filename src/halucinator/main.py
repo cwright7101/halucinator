@@ -21,6 +21,7 @@ from .peripheral_models import generic as peripheral_emulators
 
 from .bp_handlers import intercepts
 from .bp_handlers.debugger import Debugger
+from .debug_adapter.debug_adapter import DAPServer
 from .debug_shell import DebugShell
 from .peripheral_models import peripheral_server as periph_server
 from .util.profile_hals import State_Recorder
@@ -264,6 +265,7 @@ def emulate_binary(
     elf_file: None = None,
     db_name: None = None,
     qemu_args: str = None,
+    dap_port: Optional[int] = None,
 ) -> None:
     """
     Run binary on the emulated hardware.
@@ -345,6 +347,17 @@ def emulate_binary(
         sys.exit(0)
 
     signal.signal(signal.SIGINT, signal_handler)
+
+    # Start DAP server if requested
+    if dap_port is not None:
+        debugger = Debugger(qemu, avatar, None)
+        dap_thread = threading.Thread(
+            target=DAPServer(debugger, dap_port),
+            daemon=True,
+        )
+        dap_thread.start()
+        log.info("DAP server listening on port %d", dap_port)
+
     log.info("Letting QEMU Run")
 
     qemu.cont()
@@ -408,6 +421,15 @@ def main(cli_args: List[str] = None) -> None:
         "-d", "--debug", action="store_true", help="Opens a debug command line"
     )
     parser.add_argument(
+        "--dap",
+        type=int,
+        nargs="?",
+        const=34157,
+        default=None,
+        metavar="PORT",
+        help="Start Debug Adapter Protocol server (default port: 34157)",
+    )
+    parser.add_argument(
         "-q",
         "--qemu_args",
         nargs=argparse.REMAINDER,
@@ -444,6 +466,7 @@ def main(cli_args: List[str] = None) -> None:
         elf_file=args.elf,
         gdb_port=args.gdb_port,
         qemu_args=qemu_args,
+        dap_port=args.dap,
     )
 
 
