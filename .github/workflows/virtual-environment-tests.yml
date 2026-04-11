@@ -27,7 +27,7 @@ jobs:
       HALUCINATOR_QEMU_PPC64: "${{ github.workspace }}/deps/build-qemu/ppc64-softmmu/qemu-system-ppc64"
 
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v5
       with:
         submodules: true
 
@@ -70,7 +70,7 @@ jobs:
 
     - name: Restore QEMU build cache
       id: cache-qemu
-      uses: actions/cache/restore@v4
+      uses: actions/cache/restore@v5
       with:
         path: deps/build-qemu
         key: qemu-build-v2-${{ matrix.os }}-${{ steps.qemu-ref.outputs.sha }}
@@ -228,7 +228,7 @@ jobs:
 
     - name: Upload coverage report
       if: always()
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v5
       with:
         name: coverage-report-${{ matrix.os }}
         path: coverage_report/
@@ -242,7 +242,7 @@ jobs:
 
     - name: Save QEMU build cache
       if: always() && steps.cache-qemu.outputs.cache-hit != 'true'
-      uses: actions/cache/save@v4
+      uses: actions/cache/save@v5
       with:
         path: deps/build-qemu
         key: qemu-build-v2-${{ matrix.os }}-${{ steps.qemu-ref.outputs.sha }}
