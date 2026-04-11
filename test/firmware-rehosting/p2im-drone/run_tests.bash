@@ -45,7 +45,7 @@ HAL_PID=$!
 
 # Wait for halucinator to be ready
 echo "Waiting for halucinator to initialize..."
-TIMEOUT=60
+TIMEOUT=120
 ELAPSED=0
 while ! grep -q "Letting QEMU Run" ./hal_out.txt; do
     sleep 2

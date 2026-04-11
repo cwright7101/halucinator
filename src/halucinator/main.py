@@ -266,6 +266,7 @@ def emulate_binary(
     db_name: None = None,
     qemu_args: str = None,
     dap_port: Optional[int] = None,
+    gdb_server_port: Optional[int] = None,
 ) -> None:
     """
     Run binary on the emulated hardware.
@@ -347,6 +348,15 @@ def emulate_binary(
         sys.exit(0)
 
     signal.signal(signal.SIGINT, signal_handler)
+
+    # Start GDB RSP server if requested
+    if gdb_server_port is not None:
+        avatar.load_plugin('gdbserver')
+        server = avatar.spawn_gdb_server(
+            qemu, gdb_server_port,
+            stop_filter=lambda target, pc: intercepts.check_hal_bp(pc),
+        )
+        log.info("GDB RSP server listening on port %d", gdb_server_port)
 
     # Start DAP server if requested
     if dap_port is not None:
@@ -430,6 +440,16 @@ def main(cli_args: List[str] = None) -> None:
         help="Start Debug Adapter Protocol server (default port: 34157)",
     )
     parser.add_argument(
+        "--gdb-server",
+        type=int,
+        nargs="?",
+        const=3333,
+        default=None,
+        metavar="PORT",
+        dest="gdb_server",
+        help="Start GDB RSP server for external debuggers (default port: 3333)",
+    )
+    parser.add_argument(
         "-q",
         "--qemu_args",
         nargs=argparse.REMAINDER,
@@ -467,6 +487,7 @@ def main(cli_args: List[str] = None) -> None:
         gdb_port=args.gdb_port,
         qemu_args=qemu_args,
         dap_port=args.dap,
+        gdb_server_port=args.gdb_server,
     )
 
 

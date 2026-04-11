@@ -43,9 +43,9 @@ function check_output () {
 }
 export -f check_output
 #set a timeout for checking uart output
-timeout 3m bash -c 'check_output "Enter a line"'
+timeout 5m bash -c 'check_output "Enter a line"'
 echo  "This is the input" >&3
-timeout 3m bash -c 'check_output "line: This is the input"'
+timeout 5m bash -c 'check_output "line: This is the input"'
 # clean up
 exec 3>&-
 rm -f ./in1

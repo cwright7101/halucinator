@@ -111,11 +111,7 @@ class MemoryMatch:
 
 
 def check_hal_bp(pc: int) -> bool:
-    for i in intercepts.bp2handler_lut:
-        if intercepts.bp2handler_lut[i].address == pc:
-            return True
-
-    return False
+    return intercepts.check_hal_bp(pc)
 
 
 def check_debug_bp(pc: int) -> bool:

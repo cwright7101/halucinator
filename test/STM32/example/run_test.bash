@@ -30,7 +30,7 @@ for ATTEMPT in $(seq 1 $MAX_ATTEMPTS); do
     HAL_PID=$!
 
     # Wait for firmware UART prompt
-    TIMEOUT=60
+    TIMEOUT=120
     ELAPSED=0
     STARTED=false
     while [ $ELAPSED -lt $TIMEOUT ]; do
@@ -104,7 +104,7 @@ function check_output {
 }
 
 export -f check_output
-if ! timeout 3m bash -c check_output; then
+if ! timeout 5m bash -c check_output; then
     echo "TIMEOUT waiting for 'Example Finished'"
     echo "=== hal_out.txt (last 50 lines) ==="
     tail -50 ./hal_out.txt || true

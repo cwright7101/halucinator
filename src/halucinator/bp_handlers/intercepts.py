@@ -110,6 +110,14 @@ watchpoint_bps: Dict[int, int] = {}
 addr2bp_lut: Dict[int, int] = {}
 
 
+def check_hal_bp(pc: int) -> bool:
+    """Check if pc is at a HAL intercept address."""
+    for info in bp2handler_lut.values():
+        if info.address == pc:
+            return True
+    return False
+
+
 def get_bp_handler(intercept: Any) -> Any:
     """
     gets the bp_handler class from the config file class name.
