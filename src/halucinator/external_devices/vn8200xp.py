@@ -56,8 +56,8 @@ def main() -> None:
         "-i",
         "--id",
         default=0x20000AB0,
-        type=int,
-        help="Id to use when sending data",
+        type=lambda x: int(x, 0),
+        help="Id to use when sending data (supports hex)",
     )
     args = p.parse_args()
 

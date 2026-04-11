@@ -63,8 +63,8 @@ def main() -> None:
         "-i",
         "--id",
         default=0x40013800,
-        type=int,
-        help="Id to use when sending data, default is 0x40013800 for STM32F1's USART1.SR",
+        type=lambda x: int(x, 0),
+        help="Id to use when sending data, default is 0x40013800 for STM32F1's USART1.SR (supports hex)",
     )
     # We may want to add an argument for 'send-illegal-packet'
     # p.add_argument(
