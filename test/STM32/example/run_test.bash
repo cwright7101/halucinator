@@ -10,21 +10,62 @@ pkill -9 -f gdb-multiarch 2>/dev/null || true
 sleep 2
 
 rm -f ./hal_out.txt ./test_out.txt
+rm -rf tmp/Uart_Example
 
-# Run halucinator
-PYTHONUNBUFFERED=1 ./test/STM32/example/run.sh </dev/null >hal_out.txt 2>&1 &
-HAL_PID=$!
+# Pre-flight: verify QEMU binary works
+echo "=== QEMU pre-flight check ==="
+"${HALUCINATOR_QEMU_ARM}" --version || { echo "QEMU binary failed to run"; exit 1; }
+gdb-multiarch --version | head -1
+ldd "${HALUCINATOR_QEMU_ARM}" | grep "not found" && { echo "QEMU has missing shared libs"; exit 1; } || true
+echo "=== Pre-flight OK ==="
 
-# Wait for firmware UART prompt
-TIMEOUT=120
-ELAPSED=0
-while ! grep -q "Enter 10 characters using keyboard :" ./hal_out.txt 2>/dev/null; do
-    sleep 2
-    ELAPSED=$((ELAPSED + 2))
-    if [ $ELAPSED -ge $TIMEOUT ]; then
-        echo "TIMEOUT waiting for halucinator to reach UART prompt"
+# Launch halucinator with retry — avatar2's GDB connect has a short
+# timeout (5s) and can fail if QEMU is slow to start on CI runners.
+MAX_ATTEMPTS=3
+for ATTEMPT in $(seq 1 $MAX_ATTEMPTS); do
+    echo "=== Halucinator launch attempt $ATTEMPT/$MAX_ATTEMPTS ==="
+    rm -f ./hal_out.txt
+    rm -rf tmp/Uart_Example
+    PYTHONUNBUFFERED=1 ./test/STM32/example/run.sh </dev/null >hal_out.txt 2>&1 &
+    HAL_PID=$!
+
+    # Wait for firmware UART prompt
+    TIMEOUT=60
+    ELAPSED=0
+    STARTED=false
+    while [ $ELAPSED -lt $TIMEOUT ]; do
+        if grep -q "Enter 10 characters using keyboard :" ./hal_out.txt 2>/dev/null; then
+            STARTED=true
+            break
+        fi
+        if grep -q "GDBProtocol was unable to connect" ./hal_out.txt 2>/dev/null; then
+            echo "GDB connect failed on attempt $ATTEMPT"
+            echo "=== QEMU stderr ==="
+            cat tmp/Uart_Example/Uart_Example_err.txt 2>/dev/null || echo "(no QEMU stderr)"
+            echo "=== QEMU stdout ==="
+            cat tmp/Uart_Example/Uart_Example_out.txt 2>/dev/null || echo "(no QEMU stdout)"
+            echo "=== QEMU config ==="
+            cat tmp/Uart_Example/Uart_Example_conf.json 2>/dev/null || echo "(no config)"
+            break
+        fi
+        sleep 2
+        ELAPSED=$((ELAPSED + 2))
+    done
+
+    if [ "$STARTED" = true ]; then
+        break
+    fi
+
+    # Clean up failed attempt
+    kill $HAL_PID 2>/dev/null || true
+    pkill -9 -f qemu-system-arm 2>/dev/null || true
+    pkill -9 -f gdb-multiarch 2>/dev/null || true
+    sleep 3
+
+    if [ $ATTEMPT -eq $MAX_ATTEMPTS ]; then
+        echo "FAILED after $MAX_ATTEMPTS attempts"
+        echo "=== hal_out.txt ==="
         cat ./hal_out.txt
-        kill $HAL_PID 2>/dev/null || true
         exit 1
     fi
 done
@@ -40,14 +81,17 @@ uart = UARTPrintServer(io)
 io.start()
 
 # Wait for zmq subscription to propagate
-time.sleep(3)
+time.sleep(5)
 
-# Send '1234567890' as the UART input
-uart.send_data(1073811456, '1234567890')
-print('Sent input via zmq', file=sys.stderr)
+# Send '1234567890' as the UART input — retry a few times in case
+# the subscription hasn't fully propagated
+for attempt in range(3):
+    uart.send_data(1073811456, '1234567890')
+    print(f'Sent input via zmq (attempt {attempt+1})', file=sys.stderr)
+    time.sleep(5)
 
 # Wait for response and collect output
-time.sleep(15)
+time.sleep(10)
 io.shutdown()
 " 2>&1 &
 SENDER_PID=$!

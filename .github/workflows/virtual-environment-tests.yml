@@ -9,11 +9,17 @@ on:
 jobs:
 
   test-env:
-    runs-on: ubuntu-22.04
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-22.04, ubuntu-24.04]
+        include:
+          - os: ubuntu-22.04
+            codename: jammy
+          - os: ubuntu-24.04
+            codename: noble
     env:
-      VIRTUALENVWRAPPER_PYTHON: "/usr/bin/python3"
-      WORKON_HOME: "$(pwd)/virtualenvs"
-      VIRTUALENVWRAPPER_VIRTUALENV: "/usr/local/bin/virtualenv"
       HALUCINATOR_QEMU_ARM: "${{ github.workspace }}/deps/build-qemu/arm-softmmu/qemu-system-arm"
       HALUCINATOR_QEMU_ARM64: "${{ github.workspace }}/deps/build-qemu/aarch64-softmmu/qemu-system-aarch64"
       HALUCINATOR_QEMU_MIPS: "${{ github.workspace }}/deps/build-qemu/mips-softmmu/qemu-system-mips"
@@ -29,9 +35,11 @@ jobs:
       run: |
         set -e
         set -x
-        echo "deb-src http://archive.ubuntu.com/ubuntu/ jammy-security main restricted universe multiverse" | sudo tee -a /etc/apt/sources.list
-        sudo apt update
-        sudo apt-get build-dep -y qemu
+        # Enable deb-src for build-dep (both main and security)
+        echo "deb-src http://archive.ubuntu.com/ubuntu/ ${{ matrix.codename }} main restricted universe multiverse" | sudo tee -a /etc/apt/sources.list
+        echo "deb-src http://archive.ubuntu.com/ubuntu/ ${{ matrix.codename }}-security main restricted universe multiverse" | sudo tee -a /etc/apt/sources.list
+        sudo apt-get update
+        sudo apt-get build-dep -y qemu || true
         sudo apt-get install -y \
                         clang-format \
                         build-essential \
@@ -43,10 +51,13 @@ jobs:
                         gcc-arm-none-eabi \
                         git \
                         gdb-multiarch \
+                        libaio-dev \
+                        libglib2.0-dev \
                         libpixman-1-dev \
+                        pkg-config \
                         python3-pip \
                         python3-venv \
-                        python-tk \
+                        python3-tk \
                         tcpdump \
                         vim \
                         wget \
@@ -62,16 +73,15 @@ jobs:
       uses: actions/cache/restore@v4
       with:
         path: deps/build-qemu
-        key: qemu-build-${{ steps.qemu-ref.outputs.sha }}
+        key: qemu-build-${{ matrix.os }}-${{ steps.qemu-ref.outputs.sha }}
 
     - name: Setup Python virtualenv and install dependencies
       run: |
         set -e
         set -x
-        pip3 install virtualenvwrapper
-        mkdir -p $(pwd)/virtualenvs
-        /usr/bin/env virtualenv -p $(which python3) $(pwd)/virtualenvs/halucinator
+        python3 -m venv $(pwd)/virtualenvs/halucinator
         source $(pwd)/virtualenvs/halucinator/bin/activate
+        pip install --upgrade pip
         pip install -e deps/avatar2/
         pip install -r src/requirements.txt
         pip install -e src
@@ -82,8 +92,40 @@ jobs:
       run: |
         set -e
         set -x
+        rm -rf deps/build-qemu
         source $(pwd)/virtualenvs/halucinator/bin/activate
         ./build_qemu.sh
+
+    - name: Smoke-test QEMU binaries
+      run: |
+        set -e
+        set -x
+        for bin in arm-softmmu/qemu-system-arm aarch64-softmmu/qemu-system-aarch64 \
+                   mips-softmmu/qemu-system-mips ppc-softmmu/qemu-system-ppc \
+                   ppc64-softmmu/qemu-system-ppc64; do
+          echo "=== Testing deps/build-qemu/$bin ==="
+          deps/build-qemu/$bin --version
+          ldd deps/build-qemu/$bin | grep "not found" && exit 1 || true
+          # Verify the configurable machine type exists
+          deps/build-qemu/$bin -machine help | grep -q configurable || {
+            echo "FATAL: 'configurable' machine type missing from $bin"
+            deps/build-qemu/$bin -machine help
+            exit 1
+          }
+        done
+        # Test that ARM QEMU can start and accept GDB connections
+        deps/build-qemu/arm-softmmu/qemu-system-arm \
+          -machine configurable -nographic -S -gdb tcp::19999 &
+        QEMU_PID=$!
+        sleep 3
+        if kill -0 $QEMU_PID 2>/dev/null; then
+          echo "QEMU ARM started successfully and is listening"
+          kill $QEMU_PID || true
+        else
+          echo "FATAL: QEMU ARM failed to start"
+          wait $QEMU_PID || true
+          exit 1
+        fi
 
     - name: run basic tests of executable
       run: |
@@ -188,7 +230,7 @@ jobs:
       if: always()
       uses: actions/upload-artifact@v4
       with:
-        name: coverage-report
+        name: coverage-report-${{ matrix.os }}
         path: coverage_report/
 
     - name: run python tests
@@ -203,4 +245,4 @@ jobs:
       uses: actions/cache/save@v4
       with:
         path: deps/build-qemu
-        key: qemu-build-${{ steps.qemu-ref.outputs.sha }}
+        key: qemu-build-${{ matrix.os }}-${{ steps.qemu-ref.outputs.sha }}

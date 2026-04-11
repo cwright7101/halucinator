@@ -11,21 +11,44 @@ sleep 2
 
 rm -f ./hal_out.txt ./test_out.txt
 
-# Run halucinator
-PYTHONUNBUFFERED=1 HALUCINATOR_QEMU_ARM="${HALUCINATOR_QEMU_ARM}" \
-  ./test/multi_arch/arm32/run.sh </dev/null >hal_out.txt 2>&1 &
-HAL_PID=$!
+# Launch halucinator with retry — avatar2's GDB connect has a short
+# timeout (5s) and can fail if QEMU is slow to start on CI runners.
+MAX_ATTEMPTS=3
+for ATTEMPT in $(seq 1 $MAX_ATTEMPTS); do
+    echo "=== Halucinator launch attempt $ATTEMPT/$MAX_ATTEMPTS ==="
+    rm -f ./hal_out.txt
+    PYTHONUNBUFFERED=1 HALUCINATOR_QEMU_ARM="${HALUCINATOR_QEMU_ARM}" \
+      ./test/multi_arch/arm32/run.sh </dev/null >hal_out.txt 2>&1 &
+    HAL_PID=$!
 
-# Wait for firmware UART prompt
-TIMEOUT=120
-ELAPSED=0
-while ! grep -q "Multi-Arch UART Test" ./hal_out.txt 2>/dev/null; do
-    sleep 2
-    ELAPSED=$((ELAPSED + 2))
-    if [ $ELAPSED -ge $TIMEOUT ]; then
-        echo "TIMEOUT waiting for halucinator to reach UART prompt"
+    TIMEOUT=60
+    ELAPSED=0
+    STARTED=false
+    while [ $ELAPSED -lt $TIMEOUT ]; do
+        if grep -q "Multi-Arch UART Test" ./hal_out.txt 2>/dev/null; then
+            STARTED=true
+            break
+        fi
+        if grep -q "GDBProtocol was unable to connect" ./hal_out.txt 2>/dev/null; then
+            echo "GDB connect failed on attempt $ATTEMPT"
+            break
+        fi
+        sleep 2
+        ELAPSED=$((ELAPSED + 2))
+    done
+
+    if [ "$STARTED" = true ]; then
+        break
+    fi
+
+    kill $HAL_PID 2>/dev/null || true
+    pkill -9 -f qemu-system-arm 2>/dev/null || true
+    pkill -9 -f gdb-multiarch 2>/dev/null || true
+    sleep 3
+
+    if [ $ATTEMPT -eq $MAX_ATTEMPTS ]; then
+        echo "FAILED after $MAX_ATTEMPTS attempts"
         cat ./hal_out.txt
-        kill $HAL_PID 2>/dev/null || true
         exit 1
     fi
 done
