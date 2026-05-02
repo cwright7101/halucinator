@@ -125,9 +125,12 @@ class Avatar2Backend(HalBackend):
         # For other arches we fall through to the generic
         # IrqController path on HalBackend.
         if getattr(self, "arch", None) == "cortex-m3":
+            # avatar-armv7m-inject-irq takes a full Cortex-M exception
+            # number; the halucinator API takes external IRQ numbers,
+            # so add the 16-system-exception offset.
             self.target.protocols.monitor.execute_command(
                 "avatar-armv7m-inject-irq",
-                args={"num-irq": int(irq_num), "num-cpu": 0},
+                args={"num-irq": int(irq_num) + 16, "num-cpu": 0},
             )
             return
         super().inject_irq(irq_num)

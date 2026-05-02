@@ -859,9 +859,12 @@ class QEMUBackend(ARM32HalMixin, HalBackend):
         # uses; integrates with its NVIC + watchman semantics. Other
         # arches fall through to the IrqController on HalBackend.
         if getattr(self, "arch", None) == "cortex-m3":
+            # avatar-armv7m-inject-irq takes a full Cortex-M exception
+            # number; the halucinator API takes external IRQ numbers,
+            # so add the 16-system-exception offset.
             self._qmp.execute(
                 "avatar-armv7m-inject-irq",
-                {"num-irq": int(irq_num), "num-cpu": 0},
+                {"num-irq": int(irq_num) + 16, "num-cpu": 0},
             )
             return
         super().inject_irq(irq_num)
