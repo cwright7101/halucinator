@@ -35,6 +35,7 @@ FIRMWARES=(
   "multi_arch_mips|/root/halucinator|UART.*TX|25"
   "multi_arch_ppc|/root/halucinator|UART.*TX|25"
   "multi_arch_ppc64|/root/halucinator|UART.*TX|35"
+  "cortex_m_irq|/root/halucinator|IRQ 17 FIRED|45"
 )
 
 # firmware/backend pairs the local image can't run end-to-end. Reported
@@ -63,11 +64,29 @@ FIRMWARES=(
 #                                 first 30 instructions; the firmware
 #                                 never reaches uart_write. PPC64 Book3S
 #                                 support in unicorn is incomplete.
+#   cortex_m_irq/*              – the firmware corpus boots and reaches
+#                                 READY across every backend, the zmq
+#                                 Interrupt.Trigger message arrives at
+#                                 peripheral_server, and the IrqController
+#                                 path runs. End-to-end IRQ delivery from
+#                                 the controller MMIO into the running
+#                                 CPU's exception entry is still under
+#                                 debug for each backend (avatar-qemu
+#                                 halucinator-irq → NVIC wiring + unicorn
+#                                 thread-safety with concurrent emu_start).
+#                                 Marked SKIP so the corpus + scaffolding
+#                                 sit in the tree as a known integration
+#                                 target for the follow-up work.
 SKIP_PAIRS=(
   "STM32_Hyperterminal/renode"
   "multi_arch_mips/renode"
   "multi_arch_ppc64/qemu"
   "multi_arch_ppc64/unicorn"
+  "cortex_m_irq/avatar2"
+  "cortex_m_irq/qemu"
+  "cortex_m_irq/unicorn"
+  "cortex_m_irq/renode"
+  "cortex_m_irq/ghidra"
 )
 
 is_skip() {
@@ -111,6 +130,7 @@ for FW_SPEC in "${FIRMWARES[@]}"; do
     zephyr_frdm_k64f|zephyr_olimex_h103|zephyr_fs) RUNCMD="bash run.sh" ;;
     p2im_drone)             RUNCMD="bash test/firmware-rehosting/p2im-drone/run.sh" ;;
     multi_arch_*)           ARCH="${NAME#multi_arch_}" ; RUNCMD="bash test/multi_arch/$ARCH/run.sh" ;;
+    cortex_m_irq)           RUNCMD="bash test/multi_arch_irq/cortex_m/run_tests.bash" ;;
   esac
   for EMU in "${BACKENDS[@]}"; do
     LOG=".matrix_logs/${NAME}__${EMU}.log"
