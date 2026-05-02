@@ -55,6 +55,7 @@ class GicController(IrqController):
         gicd_base: int,
         version: int = 2,
         gicc_base: int | None = None,
+        irq_simple_entry: int | None = None,
         options: Dict[str, Any] | None = None,
     ) -> None:
         if version not in (2, 3):
@@ -67,6 +68,11 @@ class GicController(IrqController):
         # acknowledged IRQ ID into GICC_IAR so the firmware's ISR
         # reads the right interrupt number.
         self.gicc_base = gicc_base
+        # Optional firmware-provided IRQ entry address. arm64
+        # in-process backends can't model VBAR_EL1 + ERET, so the
+        # firmware exposes a callable trampoline (LR = interrupted
+        # PC, PC = irq_simple_entry, return via plain `ret`).
+        self.irq_simple_entry = irq_simple_entry
         self.version = version
         self.options = options or {}
         self.name = f"gicv{version}"
