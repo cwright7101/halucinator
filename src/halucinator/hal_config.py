@@ -26,6 +26,7 @@ from halucinator.config.symbols_config import HalSymbolConfig
 
 if TYPE_CHECKING:
     from halucinator.backends.hal_backend import HalBackend
+    from halucinator.backends.irq import IrqController, IrqControllerSpec
 
 # Openable is a NewType to distinguish file paths from other strings.
 Openable = NewType("Openable", str)
@@ -153,6 +154,7 @@ class HALMachineConfig:
         vector_base: int = 0x08000000,
         gdb_arch: Optional[str] = None,
         machine: Optional[str] = None,
+        interrupt_controller: Optional[Dict[str, Any]] = None,
     ) -> None:  # pylint: disable=too-many-arguments
         self.arch = arch
         self.machine = machine
@@ -163,6 +165,7 @@ class HALMachineConfig:
         self.gdb_arch = gdb_arch
         self.vector_base = vector_base
         self.config_file = config_file
+        self.interrupt_controller = self._parse_irq_spec(interrupt_controller)
         self.using_default_machine: bool = config_file is None
         self._using_default_machine: bool = self.using_default_machine  # private alias
 
@@ -172,6 +175,50 @@ class HALMachineConfig:
                 self.arch,
                 list(HALUCINATOR_TARGETS.keys()),
             )
+
+    @staticmethod
+    def _parse_irq_spec(
+        spec: Optional[Dict[str, Any]],
+    ) -> Optional["IrqControllerSpec"]:
+        """Convert the YAML `interrupt_controller` block into a
+        backends.irq.IrqControllerSpec. None passes through (caller
+        will fall back to the per-arch default)."""
+        if spec is None:
+            return None
+        from halucinator.backends.irq import IrqControllerSpec
+        # YAML is parsed as a dict like:
+        #   {type: gicv2, gicd_base: 0x08000000, ...}
+        # Pluck the well-known keys, send the rest to options for
+        # controllers that take extra kwargs (none today, but
+        # avoiding an interface tax on future ones).
+        if not isinstance(spec, dict):
+            raise ValueError(
+                f"machine.interrupt_controller must be a mapping, "
+                f"got {type(spec).__name__}"
+            )
+        if "type" not in spec:
+            raise ValueError(
+                "machine.interrupt_controller: missing required `type` key. "
+                "One of: cortex_m, gicv2, gicv3, mips, openpic."
+            )
+        known = {"type", "gicd_base", "openpic_base"}
+        options = {k: v for k, v in spec.items() if k not in known}
+        return IrqControllerSpec(
+            type=spec["type"],
+            gicd_base=spec.get("gicd_base"),
+            openpic_base=spec.get("openpic_base"),
+            options=options,
+        )
+
+    def build_irq_controller(self) -> Optional["IrqController"]:
+        """Construct the per-machine IrqController.
+
+        Returns None if the user didn't declare one and this arch has
+        no default — the backend's inject_irq will then raise
+        IrqConfigError if anyone calls it.
+        """
+        from halucinator.backends.irq import build_irq_controller
+        return build_irq_controller(self.arch, self.interrupt_controller)
 
     def get_avatar_arch(self) -> Any:
         """
