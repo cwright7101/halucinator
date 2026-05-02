@@ -677,7 +677,8 @@ class UnicornBackend(ARMHalMixin, HalBackend):
         normal write_memory and the next cont() will take the
         exception when the firmware unmasks.
         """
-        if self.arch_name not in ("cortex-m3", "arm", "arm64", "mips"):
+        if self.arch_name not in ("cortex-m3", "arm", "arm64", "mips",
+                                   "powerpc", "powerpc:MPC8XX", "ppc64"):
             super().inject_irq(irq_num)
             return
         if self._uc is None:
@@ -690,7 +691,8 @@ class UnicornBackend(ARMHalMixin, HalBackend):
         # arm64 we emit both: real GIC writes happen through the
         # controller, and the synthetic exception entry fires from
         # cont().
-        if self.arch_name in ("arm", "arm64", "mips"):
+        if self.arch_name in ("arm", "arm64", "mips",
+                               "powerpc", "powerpc:MPC8XX", "ppc64"):
             ctrl = getattr(self, "_irq_controller", None)
             if ctrl is None:
                 from halucinator.backends.irq import IrqConfigError
@@ -735,6 +737,9 @@ class UnicornBackend(ARMHalMixin, HalBackend):
             return
         if self.arch_name == "mips":
             self._apply_pending_irq_mips(irq_num)
+            return
+        if self.arch_name in ("powerpc", "powerpc:MPC8XX", "ppc64"):
+            self._apply_pending_irq_ppc(irq_num)
             return
 
         # Vector table offset: caller plumbs it in via set_vtor(); fall
@@ -932,6 +937,34 @@ class UnicornBackend(ARMHalMixin, HalBackend):
                      irq_num, irq_number_addr, irq_fired_addr)
         except Exception as exc:  # noqa: BLE001
             log.warning("inject_irq(%d): MIPS shadow write failed: %r",
+                        irq_num, exc)
+
+    def _apply_pending_irq_ppc(self, irq_num: int) -> None:
+        """Deliver a PowerPC IRQ to the running firmware via shadow
+        write — same pattern as MIPS. Unicorn doesn't model the
+        OpenPIC and PPC exception entry through SRR0/SRR1 reliably
+        for our use-case."""
+        ctrl = getattr(self, "_irq_controller", None)
+        if ctrl is None:
+            return
+        irq_number_addr = getattr(ctrl, "irq_number_addr", None)
+        irq_fired_addr = getattr(ctrl, "irq_fired_addr", None)
+        if irq_number_addr is None or irq_fired_addr is None:
+            log.warning(
+                "inject_irq(%d): ppc controller has no "
+                "irq_fired_addr/irq_number_addr — IRQ will not be "
+                "delivered to the firmware", irq_num)
+            return
+        try:
+            self._uc.mem_write(int(irq_number_addr),
+                               int(irq_num).to_bytes(4, "big"))
+            self._uc.mem_write(int(irq_fired_addr),
+                               (1).to_bytes(4, "big"))
+            log.info("inject_irq(%d): PPC shadow write -> "
+                     "irq_number@0x%x irq_fired@0x%x",
+                     irq_num, irq_number_addr, irq_fired_addr)
+        except Exception as exc:  # noqa: BLE001
+            log.warning("inject_irq(%d): PPC shadow write failed: %r",
                         irq_num, exc)
 
     def _maybe_handle_exc_return(self, addr: int) -> bool:

@@ -146,8 +146,15 @@ def _instantiate(spec: IrqControllerSpec) -> IrqController:
                 "interrupt_controller: type='openpic' requires "
                 "`openpic_base` (the OpenPIC base address)."
             )
-        return OpenPicController(openpic_base=spec.openpic_base,
-                                 options=spec.options)
+        opts = spec.options or {}
+        irq_fired_addr = opts.pop("irq_fired_addr", None)
+        irq_number_addr = opts.pop("irq_number_addr", None)
+        return OpenPicController(
+            openpic_base=spec.openpic_base,
+            irq_fired_addr=irq_fired_addr,
+            irq_number_addr=irq_number_addr,
+            options=opts,
+        )
     raise IrqConfigError(
         f"Unknown interrupt_controller type: {spec.type!r}. "
         f"Supported: cortex_m, gicv2, gicv3, mips, openpic."

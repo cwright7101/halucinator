@@ -44,9 +44,17 @@ class OpenPicController(IrqController):
     def __init__(
         self,
         openpic_base: int,
+        irq_fired_addr: int | None = None,
+        irq_number_addr: int | None = None,
         options: Dict[str, Any] | None = None,
     ) -> None:
         self.openpic_base = openpic_base
+        # Shadow-state addresses for in-process backends that
+        # bypass the firmware ISR entirely; same convention as the
+        # MIPS controller. Not used by avatar2/qemu/renode (real
+        # OpenPIC peripheral handles delivery there).
+        self.irq_fired_addr = irq_fired_addr
+        self.irq_number_addr = irq_number_addr
         self.options = options or {}
 
     def trigger(self, backend: "HalBackend", num: int) -> None:
