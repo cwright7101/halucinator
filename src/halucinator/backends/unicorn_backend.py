@@ -236,6 +236,10 @@ class UnicornBackend(ARMHalMixin, HalBackend):
         self._bp_hit_addr: Optional[int] = None
         self._breakpoints: Dict[int, int] = {}   # addr → bp_id
         self._bp_callbacks: Dict[int, Callable] = {}  # bp_id → callback
+        # Pending IRQ injected from another thread (peripheral_server zmq
+        # handler). cont() drains the queue before re-entering emu_start
+        # so the synthetic exception frame is set up single-threaded.
+        self._pending_irqs: List[int] = []
 
         # Pre-compute the register name -> unicorn reg id map for this arch.
         self._reg_map = _reg_map_for_arch(arch)
@@ -359,6 +363,14 @@ class UnicornBackend(ARMHalMixin, HalBackend):
             pc = self.read_register("pc")
         except Exception:
             pc = -1
+        # On cortex-m3, an ISR returning via `bx lr` jumps to an
+        # EXC_RETURN magic value (top nibble 0xF). Unicorn raises an
+        # exception here rather than firing the fetch-unmapped hook,
+        # so handle it the same way and unwind the synthetic frame.
+        if (self.arch_name == "cortex-m3"
+                and pc != -1
+                and self._maybe_handle_exc_return(pc)):
+            return  # _maybe_handle_exc_return already called emu_stop
         log.error("UnicornBackend: CPU exception/interrupt %d at pc=0x%x",
                   intno, pc)
         uc.emu_stop()
@@ -586,18 +598,39 @@ class UnicornBackend(ARMHalMixin, HalBackend):
             raise RuntimeError("Call UnicornBackend.init() first")
         self._stopped = False
         self._bp_hit_addr = None
-        pc = self.read_register("pc")
-        # Unicorn Thumb mode needs the LSB set on the start address.
-        start = (pc | 1) if self._is_thumb else pc
-        # Cap emu_start upper bound by arch word size.
         until = (1 << (self._word_size * 8)) - 1
-        try:
-            self._uc.emu_start(start, until, timeout=0, count=0)
-        except unicorn.UcError:
-            if self._stopped:
-                pass  # stopped by breakpoint — normal
-            else:
-                raise
+        # Loop over emu_start so an emu_stop triggered by inject_irq
+        # from another thread doesn't bubble out to the dispatch loop.
+        # We only return when a real breakpoint hook fires
+        # (self._stopped sticks True) or stop() is called externally.
+        while True:
+            # Drain any IRQs queued from another thread before
+            # resuming — the synthetic exception frame setup mutates
+            # PC/SP, only safe when emu_start is not running.
+            while self._pending_irqs:
+                self._apply_pending_irq(self._pending_irqs.pop(0))
+            pc = self.read_register("pc")
+            # Unicorn Thumb mode needs the LSB set on the start
+            # address.
+            start = (pc | 1) if self._is_thumb else pc
+            try:
+                self._uc.emu_start(start, until, timeout=0, count=0)
+            except unicorn.UcError:
+                if self._stopped:
+                    return  # stopped by breakpoint hook — normal
+                # emu_stop without a breakpoint hook firing: either
+                # inject_irq queued an IRQ on another thread, or
+                # something asked us to stop. If the former, loop and
+                # apply the IRQ. Otherwise honour the stop.
+                if not self._pending_irqs:
+                    raise
+                # fall through to drain queue + re-enter emu_start
+                continue
+            # emu_start returned without UcError: same logic as
+            # above — drain pending or honour external stop.
+            if self._pending_irqs:
+                continue
+            return
 
     def stop(self) -> None:
         self._stopped = True
@@ -628,11 +661,14 @@ class UnicornBackend(ARMHalMixin, HalBackend):
     def inject_irq(self, irq_num: int) -> None:
         """Deliver an external IRQ.
 
-        Cortex-M3 fast-path: synthesise the architectural exception
-        frame (r0–r3, r12, lr, pc, xpsr) on the main stack, set LR to
-        the thread-mode / MSP EXC_RETURN magic, jump PC to the ISR
-        from the vector table. Skips the controller-MMIO write —
-        unicorn doesn't have a real NVIC peripheral to receive it.
+        Cortex-M3 fast-path: queue the IRQ for the dispatch loop, then
+        call ``emu_stop`` to break out of any in-flight ``emu_start``.
+        cont() drains the queue (synthesises the exception frame on
+        the main stack, sets LR to EXC_RETURN, jumps PC to the ISR)
+        immediately before re-entering ``emu_start`` so all CPU-state
+        mutation happens single-threaded. Skips the controller-MMIO
+        write — unicorn doesn't have a real NVIC peripheral to
+        receive it.
 
         For other arches, fall through to HalBackend.inject_irq, which
         routes through the configured IrqController (CP0 Cause for
@@ -645,6 +681,21 @@ class UnicornBackend(ARMHalMixin, HalBackend):
             return
         if self._uc is None:
             raise RuntimeError("Call UnicornBackend.init() first")
+        # Cross-thread safe: list.append() + emu_stop are atomic from
+        # Python's perspective. The dispatch thread will see the
+        # pending entry on its next cont() call.
+        self._pending_irqs.append(int(irq_num))
+        try:
+            self._uc.emu_stop()
+        except Exception:  # noqa: BLE001 — uc raises if not running
+            pass
+
+    def _apply_pending_irq(self, irq_num: int) -> None:
+        """Set up the synthetic Cortex-M exception frame for a pended
+        IRQ. Must run on the dispatch thread (between emu_start
+        chunks) — Unicorn isn't safe against PC/SP writes mid-run."""
+        if self._uc is None:
+            return
 
         # Vector table offset: caller plumbs it in via set_vtor(); fall
         # back to 0 for backward compatibility.

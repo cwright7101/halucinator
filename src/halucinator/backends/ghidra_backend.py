@@ -86,6 +86,12 @@ class GhidraBackend(ARM32HalMixin, HalBackend):
         self._language: Optional[Any] = None
         self._stopped = True
         self._bp_hit_addr: Optional[int] = None
+        # IRQ queue populated from another thread (peripheral_server's
+        # zmq handler). cont() drains the queue between emulator.run
+        # chunks so the synthetic exception frame setup is
+        # single-threaded — Ghidra's setContextRegister can only run
+        # while the emulator is in STOPPED state.
+        self._pending_irqs: List[int] = []
 
         # Arch-specific ABI binding.
         abi_cls = ABI_MIXINS.get(arch, ARM32HalMixin)
@@ -330,40 +336,60 @@ class GhidraBackend(ARM32HalMixin, HalBackend):
             raise RuntimeError("Call GhidraBackend.init() first")
         self._stopped = False
         from ghidra.util.task import TaskMonitor  # type: ignore
-        if self._watchpoints:
-            # Step-mode: run one instruction at a time and check the
-            # tracked write set against every active write watchpoint.
-            # Slower, but gives us halt-on-access semantics without a
-            # dedicated pcode op hook — EmulatorHelper has no such API.
-            self._emulator.enableMemoryWriteTracking(True)
-            while not self._stopped:
-                self._emulator.step(TaskMonitor.DUMMY)
-                state = str(self._emulator.getEmulateExecutionState())
-                if state != "STOPPED" and state != "BREAKPOINT":
-                    break
-                exec_addr = self._emulator.getExecutionAddress()
-                pc = (int(exec_addr.getUnsignedOffset())
-                      if exec_addr is not None else 0)
-                if pc in self._breakpoints:
-                    self._bp_hit_addr = pc
-                    return
-                if self._check_watchpoints():
-                    return
-            # fall through to error logging
-            hit = False
-        else:
-            hit = self._emulator.run(TaskMonitor.DUMMY)
-        exec_addr = self._emulator.getExecutionAddress()
-        pc = int(exec_addr.getUnsignedOffset()) if exec_addr is not None else 0
-        self._bp_hit_addr = pc
-        if hit:
+        # Drain-and-loop: a setHalt issued from inject_irq breaks out
+        # of run(), but we don't want it to surface to the dispatch
+        # loop — apply the queued IRQ and re-enter run() instead.
+        # Loop exits only on a real breakpoint hit, watchpoint hit,
+        # or external stop().
+        while True:
+            while self._pending_irqs:
+                self._apply_pending_irq(self._pending_irqs.pop(0))
+                # setHalt(True) latches; clear it so the next run()
+                # actually executes instructions.
+                try:
+                    self._emulator.setHalt(False)
+                except Exception:  # noqa: BLE001
+                    pass
+            if self._watchpoints:
+                # Step-mode: run one instruction at a time and check
+                # tracked writes against active write-watchpoints.
+                self._emulator.enableMemoryWriteTracking(True)
+                while not self._stopped and not self._pending_irqs:
+                    self._emulator.step(TaskMonitor.DUMMY)
+                    state = str(self._emulator.getEmulateExecutionState())
+                    if state != "STOPPED" and state != "BREAKPOINT":
+                        break
+                    exec_addr = self._emulator.getExecutionAddress()
+                    pc = (int(exec_addr.getUnsignedOffset())
+                          if exec_addr is not None else 0)
+                    if pc in self._breakpoints:
+                        self._bp_hit_addr = pc
+                        return
+                    if self._check_watchpoints():
+                        return
+                hit = False
+            else:
+                hit = self._emulator.run(TaskMonitor.DUMMY)
+            exec_addr = self._emulator.getExecutionAddress()
+            pc = int(exec_addr.getUnsignedOffset()) if exec_addr is not None else 0
+            self._bp_hit_addr = pc
+            if hit:
+                return
+            # run() returned without a real hit. If an inject_irq
+            # queued an IRQ in the meantime, apply and resume; if the
+            # caller asked us to stop, honour that; otherwise log and
+            # exit (firmware ran off the rails).
+            if self._pending_irqs:
+                continue
+            if self._stopped:
+                return
+            state = str(self._emulator.getEmulateExecutionState())
+            err = str(self._emulator.getLastError() or "")
+            log.error(
+                "GhidraBackend: cont() stopped at pc=0x%x state=%s%s",
+                pc, state, f" err={err!r}" if err else "",
+            )
             return
-        state = str(self._emulator.getEmulateExecutionState())
-        err = str(self._emulator.getLastError() or "")
-        log.error(
-            "GhidraBackend: cont() stopped at pc=0x%x state=%s%s",
-            pc, state, f" err={err!r}" if err else "",
-        )
 
     def _check_watchpoints(self) -> bool:
         """Return True if any write-watchpoint fired since tracking was
@@ -416,12 +442,13 @@ class GhidraBackend(ARM32HalMixin, HalBackend):
     def inject_irq(self, irq_num: int) -> None:
         """Deliver an external IRQ.
 
-        Cortex-M3 fast-path: software-synthesised exception frame
-        delivery — same as UnicornBackend. Mirrors what real Cortex-M
-        hardware does on entry (push r0-r3, r12, lr, pc, xpsr; set LR
-        to EXC_RETURN; jump PC to vector[16+N]). Skips the
-        controller-MMIO write — Ghidra's PCode emulator doesn't model
-        the NVIC peripheral.
+        Cortex-M3 fast-path: queue the IRQ for the dispatch thread
+        and request the running emulator halt. cont() drains the
+        queue (synthesises the exception frame, sets LR to
+        EXC_RETURN, jumps PC to vector[16+N]) before re-running, so
+        register writes happen while the emulator is in STOPPED
+        state. Skips the controller-MMIO write — Ghidra's PCode
+        emulator doesn't model the NVIC peripheral.
 
         Other arches fall through to HalBackend.inject_irq, which
         routes through the configured IrqController via memory or
@@ -433,6 +460,21 @@ class GhidraBackend(ARM32HalMixin, HalBackend):
             return
         if self._emulator is None:
             raise RuntimeError("Call GhidraBackend.init() first")
+        # Cross-thread safe: list.append is atomic in CPython.
+        self._pending_irqs.append(int(irq_num))
+        # setHalt asks the running emulator to break out of run().
+        try:
+            self._emulator.setHalt(True)
+        except Exception:  # noqa: BLE001
+            pass
+
+    def _apply_pending_irq(self, irq_num: int) -> None:
+        """Synthesise the Cortex-M exception frame for a queued IRQ.
+        Must run on the dispatch thread, while the Ghidra emulator
+        is STOPPED — setContextRegister and writeRegister both
+        require the emulator to be paused."""
+        if self._emulator is None:
+            return
         vtor = getattr(self, "_vtor", 0)
         isr_slot = vtor + (16 + irq_num) * 4
         try:
