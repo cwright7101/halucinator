@@ -64,26 +64,28 @@ FIRMWARES=(
 #                                 first 30 instructions; the firmware
 #                                 never reaches uart_write. PPC64 Book3S
 #                                 support in unicorn is incomplete.
-#   cortex_m_irq/*              – the firmware corpus boots and reaches
-#                                 READY across every backend, the zmq
-#                                 Interrupt.Trigger message arrives at
-#                                 peripheral_server, and the IrqController
-#                                 path runs. End-to-end IRQ delivery from
-#                                 the controller MMIO into the running
-#                                 CPU's exception entry is still under
-#                                 debug for each backend (avatar-qemu
-#                                 halucinator-irq → NVIC wiring + unicorn
-#                                 thread-safety with concurrent emu_start).
-#                                 Marked SKIP so the corpus + scaffolding
-#                                 sit in the tree as a known integration
-#                                 target for the follow-up work.
+#   cortex_m_irq/unicorn        – peripheral_server's IRQ thread races
+#                                 the dispatch loop's emu_start; setting
+#                                 PC/SP/LR mid-emulation triggers
+#                                 UC_ERR_INSN_INVALID. Needs a
+#                                 stop-then-resume helper around the
+#                                 synthetic exception frame setup.
+#   cortex_m_irq/ghidra         – same race; Ghidra raises
+#                                 IllegalStateException("emulator is not
+#                                 STOPPED") on the cross-thread setContext
+#                                 call from peripheral_server.
+#   cortex_m_irq/renode         – `sysbus.cpu OnGPIO 17 True` is accepted
+#                                 by Renode's monitor but the NVIC line
+#                                 wiring on the in-tree platform doesn't
+#                                 propagate to the cortex-m exception
+#                                 entry. Likely needs a Cortex-M-specific
+#                                 platform .repl with explicit
+#                                 nvic.IRQ -> cpu wiring.
 SKIP_PAIRS=(
   "STM32_Hyperterminal/renode"
   "multi_arch_mips/renode"
   "multi_arch_ppc64/qemu"
   "multi_arch_ppc64/unicorn"
-  "cortex_m_irq/avatar2"
-  "cortex_m_irq/qemu"
   "cortex_m_irq/unicorn"
   "cortex_m_irq/renode"
   "cortex_m_irq/ghidra"

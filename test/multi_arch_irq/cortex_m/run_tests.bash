@@ -21,8 +21,10 @@ rm -f ./hal_out.txt
 rm -rf tmp/cortex_m_irq_test
 
 # Launch halucinator. Backend selected via $HAL_EMULATOR (default
-# avatar2). The matrix harness sets this per cell.
-PYTHONUNBUFFERED=1 HALUCINATOR_QEMU_ARM="${HALUCINATOR_QEMU_ARM}" \
+# avatar2). The matrix harness sets this per cell. Pass through
+# HALUCINATOR_QEMU_ARM only when caller actually set it - empty string
+# triggers halucinator's "Path ENV VAR is invalid" check.
+PYTHONUNBUFFERED=1 ${HALUCINATOR_QEMU_ARM:+HALUCINATOR_QEMU_ARM="$HALUCINATOR_QEMU_ARM"} \
     bash ./test/multi_arch_irq/cortex_m/run.sh </dev/null \
     > hal_out.txt 2>&1 &
 HAL_PID=$!
