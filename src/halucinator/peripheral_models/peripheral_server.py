@@ -176,28 +176,6 @@ def inject_irq(irq_num: int = 1) -> None:
         legacy(irq_num)
 
 
-def inject_irq(irq_num=1):
-    """Inject *irq_num* on the running backend.
-
-    Prefers the modern HalBackend.inject_irq path (which routes
-    through the configured IrqController for non-Cortex-M arches).
-    Falls back to the legacy avatar2 QemuTarget.irq_set_qmp method
-    when the registered backend doesn't expose inject_irq — that
-    keeps the existing avatar2 + cortex-m flow working unchanged.
-    """
-    if __QEMU is None:
-        return
-    inject = getattr(__QEMU, "inject_irq", None)
-    if callable(inject):
-        inject(irq_num)
-        return
-    # Legacy avatar2 path: bare QemuTarget with the halucinator-irq
-    # qom device.
-    legacy = getattr(__QEMU, "irq_set_qmp", None)
-    if callable(legacy):
-        legacy(irq_num)
-
-
 def irq_set_qmp(irq_num: int = 1) -> None:
     """Deprecated alias for inject_irq().
 

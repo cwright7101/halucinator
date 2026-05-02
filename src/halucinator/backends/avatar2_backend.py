@@ -127,7 +127,7 @@ class Avatar2Backend(HalBackend):
         if getattr(self, "arch", None) == "cortex-m3":
             self.target.protocols.monitor.execute_command(
                 "avatar-armv7m-inject-irq",
-                {"num_irq": irq_num, "num_cpu": 0},
+                args={"num-irq": int(irq_num), "num-cpu": 0},
             )
             return
         super().inject_irq(irq_num)

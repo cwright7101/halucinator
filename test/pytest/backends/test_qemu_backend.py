@@ -209,7 +209,7 @@ class TestQEMUBackend:
         b.inject_irq(5)
         b._qmp.execute.assert_called_once_with(
             "avatar-armv7m-inject-irq",
-            {"num_irq": 5, "num_cpu": 0},
+            {"num-irq": 5, "num-cpu": 0},
         )
 
     def test_arm_mixin_get_arg_register(self, backend_with_mocks):
