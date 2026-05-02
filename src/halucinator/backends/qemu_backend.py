@@ -861,7 +861,7 @@ class QEMUBackend(ARM32HalMixin, HalBackend):
         if getattr(self, "arch", None) == "cortex-m3":
             self._qmp.execute(
                 "avatar-armv7m-inject-irq",
-                {"num_irq": irq_num, "num_cpu": 0},
+                {"num-irq": int(irq_num), "num-cpu": 0},
             )
             return
         super().inject_irq(irq_num)
