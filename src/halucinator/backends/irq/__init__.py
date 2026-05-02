@@ -129,7 +129,16 @@ def _instantiate(spec: IrqControllerSpec) -> IrqController:
                              options=spec.options)
     if spec.type == "mips":
         from .mips import MipsController
-        return MipsController(options=spec.options)
+        opts = spec.options or {}
+        irq_simple_entry = opts.pop("irq_simple_entry", None)
+        irq_fired_addr = opts.pop("irq_fired_addr", None)
+        irq_number_addr = opts.pop("irq_number_addr", None)
+        return MipsController(
+            irq_simple_entry=irq_simple_entry,
+            irq_fired_addr=irq_fired_addr,
+            irq_number_addr=irq_number_addr,
+            options=opts,
+        )
     if spec.type == "openpic":
         from .openpic import OpenPicController
         if spec.openpic_base is None:

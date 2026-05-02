@@ -52,7 +52,24 @@ _MAX_IP = 7
 class MipsController(IrqController):
     name = "mips"
 
-    def __init__(self, options: Dict[str, Any] | None = None) -> None:
+    def __init__(
+        self,
+        irq_simple_entry: int | None = None,
+        irq_fired_addr: int | None = None,
+        irq_number_addr: int | None = None,
+        options: Dict[str, Any] | None = None,
+    ) -> None:
+        # Trampoline address for in-process backends without a real
+        # CP0 exception entry model. Same convention as
+        # GicController.irq_simple_entry: receives the IRQ number in
+        # the first argument register and returns via the link
+        # register.
+        self.irq_simple_entry = irq_simple_entry
+        # Shadow-state addresses for in-process backends that
+        # bypass the firmware ISR entirely and just write the
+        # post-ack globals.
+        self.irq_fired_addr = irq_fired_addr
+        self.irq_number_addr = irq_number_addr
         self.options = options or {}
 
     def trigger(self, backend: "HalBackend", num: int) -> None:

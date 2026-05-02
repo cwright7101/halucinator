@@ -1,0 +1,25 @@
+machine:
+  arch: mips
+  cpu_model: 24Kf
+  entry_addr: 0x80000030
+  init_sp: 0xA000FF00
+  vector_base: 0x80000000
+  gdb_exe: gdb-multiarch
+  interrupt_controller:
+    type: mips
+    # In-process backends without a CP0 exception model (unicorn,
+    # ghidra) bypass the firmware ISR entirely and write the
+    # post-ack globals straight into RAM. Addresses below come from
+    # nm test_irq.elf — keep these in sync if the firmware's .bss
+    # layout changes.
+    irq_number_addr: 0xA0000000
+    irq_fired_addr:  0xA0000004
+
+intercepts:
+- class: halucinator.bp_handlers.generic.test_uart.TestUART
+  function: uart_init
+  symbol: uart_init
+
+- class: halucinator.bp_handlers.generic.test_uart.TestUART
+  function: uart_write
+  symbol: uart_write

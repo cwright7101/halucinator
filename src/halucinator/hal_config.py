@@ -202,12 +202,17 @@ class HALMachineConfig:
                 "One of: cortex_m, gicv2, gicv3, mips, openpic."
             )
         known = {"type", "gicd_base", "gicc_base",
-                 "irq_simple_entry", "openpic_base"}
+                 "irq_simple_entry", "irq_fired_addr",
+                 "irq_number_addr", "openpic_base"}
         options = {k: v for k, v in spec.items() if k not in known}
         if spec.get("gicc_base") is not None:
             options.setdefault("gicc_base", spec["gicc_base"])
         if spec.get("irq_simple_entry") is not None:
             options.setdefault("irq_simple_entry", spec["irq_simple_entry"])
+        if spec.get("irq_fired_addr") is not None:
+            options.setdefault("irq_fired_addr", spec["irq_fired_addr"])
+        if spec.get("irq_number_addr") is not None:
+            options.setdefault("irq_number_addr", spec["irq_number_addr"])
         return IrqControllerSpec(
             type=spec["type"],
             gicd_base=spec.get("gicd_base"),
