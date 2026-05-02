@@ -56,7 +56,7 @@ except ImportError:
 # controls pointer width in read_memory(..., num_words=1).
 _ARCH_MAP: Dict[str, Tuple[str, str, bool, bool, int]] = {
     "cortex-m3":      ("arm",    "thumb", True,  False, 4),
-    "arm":            ("arm",    "thumb", True,  False, 4),
+    "arm":            ("arm",    "arm",   False, False, 4),
     "arm64":          ("arm64",  "arm",   False, False, 8),
     "mips":           ("mips",   "mips32_be", False, True, 4),
     "powerpc":        ("ppc",    "ppc32_be", False, True, 4),
@@ -89,6 +89,7 @@ def _get_arm_reg_map() -> Dict[str, int]:
         "lr":   arm_const.UC_ARM_REG_LR,
         "pc":   arm_const.UC_ARM_REG_PC,
         "cpsr": arm_const.UC_ARM_REG_CPSR,
+        "spsr": arm_const.UC_ARM_REG_SPSR,
     }
     _REG_MAPS_CACHE["arm"] = m
     return m
@@ -661,22 +662,22 @@ class UnicornBackend(ARMHalMixin, HalBackend):
     def inject_irq(self, irq_num: int) -> None:
         """Deliver an external IRQ.
 
-        Cortex-M3 fast-path: queue the IRQ for the dispatch loop, then
-        call ``emu_stop`` to break out of any in-flight ``emu_start``.
-        cont() drains the queue (synthesises the exception frame on
-        the main stack, sets LR to EXC_RETURN, jumps PC to the ISR)
-        immediately before re-entering ``emu_start`` so all CPU-state
-        mutation happens single-threaded. Skips the controller-MMIO
-        write — unicorn doesn't have a real NVIC peripheral to
-        receive it.
+        Cortex-M3 / ARMv7-A fast-path: queue the IRQ for the dispatch
+        loop, then call ``emu_stop`` to break out of any in-flight
+        ``emu_start``. cont() drains the queue (synthesises the
+        exception entry on the main stack, sets banked LR_irq, jumps
+        PC to the architectural IRQ vector) immediately before
+        re-entering ``emu_start`` so all CPU-state mutation happens
+        single-threaded. Skips controller-MMIO writes — unicorn
+        doesn't model the NVIC or GIC.
 
         For other arches, fall through to HalBackend.inject_irq, which
         routes through the configured IrqController (CP0 Cause for
-        MIPS, GICD MMIO for arm/arm64, OpenPIC IPIDR for PPC). MMIO
-        writes go through unicorn's normal write_memory and the next
-        cont() will take the exception when the firmware unmasks.
+        MIPS, OpenPIC IPIDR for PPC). MMIO writes go through unicorn's
+        normal write_memory and the next cont() will take the
+        exception when the firmware unmasks.
         """
-        if self.arch_name != "cortex-m3":
+        if self.arch_name not in ("cortex-m3", "arm"):
             super().inject_irq(irq_num)
             return
         if self._uc is None:
@@ -691,10 +692,13 @@ class UnicornBackend(ARMHalMixin, HalBackend):
             pass
 
     def _apply_pending_irq(self, irq_num: int) -> None:
-        """Set up the synthetic Cortex-M exception frame for a pended
-        IRQ. Must run on the dispatch thread (between emu_start
-        chunks) — Unicorn isn't safe against PC/SP writes mid-run."""
+        """Set up the synthetic exception entry for a pended IRQ.
+        Must run on the dispatch thread (between emu_start chunks)
+        — Unicorn isn't safe against PC/SP writes mid-run."""
         if self._uc is None:
+            return
+        if self.arch_name == "arm":
+            self._apply_pending_irq_armv7a(irq_num)
             return
 
         # Vector table offset: caller plumbs it in via set_vtor(); fall
@@ -730,6 +734,79 @@ class UnicornBackend(ARMHalMixin, HalBackend):
     def set_vtor(self, vtor: int) -> None:
         """Remember the vector-table base so inject_irq can find ISRs."""
         self._vtor = vtor
+
+    # ARMv7-A CPSR mode bits.
+    _ARM_MODE_USER = 0x10
+    _ARM_MODE_FIQ  = 0x11
+    _ARM_MODE_IRQ  = 0x12
+    _ARM_MODE_SVC  = 0x13
+    _ARM_MODE_ABT  = 0x17
+    _ARM_MODE_UND  = 0x1B
+    _ARM_MODE_SYS  = 0x1F
+    _ARM_MODE_MASK = 0x1F
+    _ARM_CPSR_I    = 0x80   # IRQ mask
+    _ARM_CPSR_T    = 0x20   # Thumb
+
+    def _apply_pending_irq_armv7a(self, irq_num: int) -> None:
+        """Synthesise an ARMv7-A IRQ exception entry.
+
+        Per ARMv7-A architecture (B1.8.3 Exception entry):
+          R14_irq  = PC (return + correction)
+          SPSR_irq = CPSR
+          CPSR.M   = 0b10010 (IRQ mode)
+          CPSR.I   = 1        (mask further IRQs)
+          CPSR.T   = 0        (ARM state)
+          PC       = vbar + 0x18
+
+        The IRQ exception's standard return-address correction is
+        ``LR -= 4`` in the handler before ``subs pc, lr, #4``. Our
+        firmware's _irq_entry stub does exactly this; we therefore
+        pass the *next* instruction's PC into LR_irq. The ISR's
+        ``movs pc, lr`` then restores CPSR from SPSR_irq and resumes.
+        """
+        # Snapshot pre-IRQ state.
+        cpsr = self.read_register("cpsr")
+        if cpsr & self._ARM_CPSR_I:
+            # IRQs masked — re-queue and let the firmware unmask
+            # itself; otherwise we'd nest exceptions.
+            self._pending_irqs.insert(0, irq_num)
+            self._uc.emu_stop()
+            return
+        pc = self.read_register("pc")
+        # The next-instruction PC. ARMv7-A IRQ entry sets LR_irq to
+        # PC+4 in ARM state; the handler then subtracts 4 to get back
+        # to the interrupted instruction.
+        return_pc = pc + 4
+
+        # Switch CPSR to IRQ mode. Writing CPSR auto-banks SP/LR/SPSR.
+        new_cpsr = cpsr & ~(self._ARM_MODE_MASK | self._ARM_CPSR_T)
+        new_cpsr |= self._ARM_MODE_IRQ | self._ARM_CPSR_I
+        self.write_register("cpsr", new_cpsr)
+
+        # Now in IRQ-banked LR/SPSR.
+        self.write_register("lr", return_pc)
+        self.write_register("spsr", cpsr)
+
+        # Stash the acknowledged IRQ ID into GICC_IAR if the
+        # configured GicController carries a gicc_base. Real GIC
+        # hardware exposes this via the CPU interface; without a
+        # hardware model the firmware's MMIO read otherwise comes
+        # back as zero-initialised memory.
+        ctrl = getattr(self, "_irq_controller", None)
+        gicc_base = getattr(ctrl, "gicc_base", None) if ctrl else None
+        if gicc_base is not None:
+            try:
+                self._uc.mem_write(
+                    gicc_base + 0x0C,
+                    int(irq_num).to_bytes(4, "little"),
+                )
+            except Exception:  # noqa: BLE001
+                pass
+
+        vbar = getattr(self, "_vtor", 0)
+        self.write_register("pc", vbar + 0x18)
+        log.info("inject_irq(%d): ARMv7-A entry @ 0x%x, return=0x%x",
+                 irq_num, vbar + 0x18, return_pc)
 
     def _maybe_handle_exc_return(self, addr: int) -> bool:
         """Called from the invalid-fetch hook. If the fetch address looks

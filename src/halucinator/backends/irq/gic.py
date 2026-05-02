@@ -54,6 +54,7 @@ class GicController(IrqController):
         self,
         gicd_base: int,
         version: int = 2,
+        gicc_base: int | None = None,
         options: Dict[str, Any] | None = None,
     ) -> None:
         if version not in (2, 3):
@@ -61,6 +62,11 @@ class GicController(IrqController):
                 f"GIC version must be 2 or 3, got {version}"
             )
         self.gicd_base = gicd_base
+        # Optional CPU-interface base. Backends that don't model a
+        # real GIC (unicorn, ghidra) use this address to stash the
+        # acknowledged IRQ ID into GICC_IAR so the firmware's ISR
+        # reads the right interrupt number.
+        self.gicc_base = gicc_base
         self.version = version
         self.options = options or {}
         self.name = f"gicv{version}"

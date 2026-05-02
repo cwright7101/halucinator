@@ -341,7 +341,7 @@ class GhidraBackend(ARM32HalMixin, HalBackend):
         # registers while the emulator is running). Watchpoints also
         # require single-stepping. In both cases we run in step-mode
         # and poll the queue every N instructions.
-        irq_poll = (self.arch == "cortex-m3")
+        irq_poll = (self.arch in ("cortex-m3", "arm"))
         if self._watchpoints or irq_poll:
             self._emulator.enableMemoryWriteTracking(bool(self._watchpoints))
             self._step_with_polling()
@@ -465,6 +465,78 @@ class GhidraBackend(ARM32HalMixin, HalBackend):
         """Remember the vector-table base so inject_irq can find ISRs."""
         self._vtor = vtor
 
+    # ARMv7-A CPSR / mode constants.
+    _ARM_MODE_IRQ = 0x12
+    _ARM_MODE_MASK = 0x1F
+    _ARM_CPSR_I = 0x80
+    _ARM_CPSR_T = 0x20
+
+    def _apply_pending_irq_armv7a(self, irq_num: int) -> None:
+        """Synthesise an ARMv7-A IRQ entry. Mirror of UnicornBackend's
+        version, but using Ghidra's writeRegister API.
+
+        On entry sets:
+          R14_irq  = PC + 4  (ARM-mode return correction)
+          SPSR_irq = CPSR
+          CPSR.M   = IRQ
+          CPSR.I   = 1
+          PC       = vbar + 0x18
+        """
+        if self._emulator is None:
+            return
+        cpsr = self.read_register("cpsr")
+        if cpsr & self._ARM_CPSR_I:
+            self._pending_irqs.insert(0, irq_num)
+            try:
+                self._emulator.setHalt(True)
+            except Exception:  # noqa: BLE001
+                pass
+            return
+        pc = self.read_register("pc")
+        return_pc = pc + 4
+
+        new_cpsr = cpsr & ~(self._ARM_MODE_MASK | self._ARM_CPSR_T)
+        new_cpsr |= self._ARM_MODE_IRQ | self._ARM_CPSR_I
+
+        # Ghidra ARM model: SP/LR/SPSR are banked per mode and Sleigh
+        # exposes them as separate named registers. Switch CPSR mode
+        # first so subsequent register writes target the right bank.
+        from java.math import BigInteger  # type: ignore
+        cpsr_reg = self._resolve_register("cpsr")
+        self._emulator.writeRegister(cpsr_reg, BigInteger.valueOf(new_cpsr))
+
+        # Banked LR_irq / SPSR_irq go by their explicit Sleigh names
+        # in the ARM language. Fall back gracefully if the names
+        # don't resolve on this build.
+        for name, val in (("lr_irq", return_pc), ("spsr_irq", cpsr)):
+            r = self._resolve_register(name)
+            if r is not None:
+                self._emulator.writeRegister(r, BigInteger.valueOf(int(val)))
+
+        # GICC_IAR shadow write so the firmware ISR reads back the
+        # acknowledged IRQ number on backends that don't model the
+        # GIC CPU interface.
+        ctrl = getattr(self, "_irq_controller", None)
+        gicc_base = getattr(ctrl, "gicc_base", None) if ctrl else None
+        if gicc_base is not None:
+            try:
+                self.write_memory(gicc_base + 0x0C, 1,
+                                  int(irq_num).to_bytes(4, "little"),
+                                  4, raw=True)
+            except Exception:  # noqa: BLE001
+                pass
+
+        vbar = getattr(self, "_vtor", 0)
+        # Plain writeRegister bypasses the TMode dance — we already
+        # cleared T in CPSR.
+        pc_reg = self._resolve_register("pc")
+        self._emulator.writeRegister(pc_reg,
+                                     BigInteger.valueOf(vbar + 0x18))
+        log.info(
+            "GhidraBackend.inject_irq(%d): ARMv7-A entry @ 0x%x, return=0x%x",
+            irq_num, vbar + 0x18, return_pc,
+        )
+
     def inject_irq(self, irq_num: int) -> None:
         """Deliver an external IRQ.
 
@@ -481,7 +553,7 @@ class GhidraBackend(ARM32HalMixin, HalBackend):
         register writes; those go through the standard PCode emulator
         memory state and the firmware sees them on the next cont().
         """
-        if self.arch not in ("cortex-m3",):
+        if self.arch not in ("cortex-m3", "arm"):
             super().inject_irq(irq_num)
             return
         if self._emulator is None:
@@ -495,11 +567,14 @@ class GhidraBackend(ARM32HalMixin, HalBackend):
             pass
 
     def _apply_pending_irq(self, irq_num: int) -> None:
-        """Synthesise the Cortex-M exception frame for a queued IRQ.
-        Must run on the dispatch thread, while the Ghidra emulator
-        is STOPPED — setContextRegister and writeRegister both
-        require the emulator to be paused."""
+        """Synthesise an exception entry for a queued IRQ. Must run
+        on the dispatch thread, while the Ghidra emulator is STOPPED
+        — setContextRegister and writeRegister both require the
+        emulator to be paused."""
         if self._emulator is None:
+            return
+        if self.arch == "arm":
+            self._apply_pending_irq_armv7a(irq_num)
             return
         vtor = getattr(self, "_vtor", 0)
         isr_slot = vtor + (16 + irq_num) * 4
