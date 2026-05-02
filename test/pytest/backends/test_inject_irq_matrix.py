@@ -86,6 +86,10 @@ class TestUnicornCortexM:
         b.set_vtor(0x08000000)
         # No IrqController attached — cortex-m3 fast-path runs anyway.
         b.inject_irq(2)
+        # inject_irq queues; cont() drains the queue between
+        # emu_start chunks. Drain manually here so we can assert
+        # against PC without spinning the CPU.
+        b._apply_pending_irq(b._pending_irqs.pop(0))
         # PC should be at the ISR (0x100 with Thumb bit cleared).
         assert b.read_register("pc") & ~1 == 0x100
 

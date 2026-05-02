@@ -82,13 +82,16 @@ class TestUnicornBackendInterface:
             b.read_register("xyz_unknown")
 
     def test_inject_irq_warns_without_vector(self, caplog):
-        """When no ISR is installed at the vector table slot, inject_irq
-        should refuse to jump into zero rather than crash."""
+        """When no ISR is installed at the vector table slot, applying
+        a queued IRQ should refuse to jump into zero rather than
+        crash."""
         import logging
         b = _make_backend()
-        # No vector table installed → slot holds 0.
+        # No vector table installed → slot holds 0. inject_irq queues;
+        # _apply_pending_irq is what the dispatch loop runs.
+        b.inject_irq(5)
         with caplog.at_level(logging.WARNING):
-            b.inject_irq(5)
+            b._apply_pending_irq(b._pending_irqs.pop(0))
         assert "vector table slot" in caplog.text
 
     def test_inject_irq_non_cortex_m_routes_through_controller(self):
@@ -124,8 +127,12 @@ class TestUnicornBackendInterface:
         assert b.read_memory(0x08000204, 4, 1) == (1 << 1)
 
     def test_inject_irq_enters_isr_on_cortex_m(self):
-        """With a vector table installed, inject_irq pushes an exception
-        frame, sets PC to the ISR, and puts the EXC_RETURN magic in LR."""
+        """With a vector table installed, inject_irq queues the IRQ;
+        applying it pushes an exception frame, sets PC to the ISR,
+        and puts the EXC_RETURN magic in LR. Apply happens
+        automatically inside cont() between emu_start chunks; the
+        test calls _apply_pending_irq directly to avoid spinning a
+        real CPU."""
         import struct
         b = _make_backend()
         # Pretend vector table starts at flash base.
@@ -140,6 +147,10 @@ class TestUnicornBackendInterface:
         b.write_register("lr", 0x08000ABF)
 
         b.inject_irq(2)
+        assert b._pending_irqs == [2]
+        # Drain the pending IRQ as cont() would on the dispatch thread.
+        b._apply_pending_irq(b._pending_irqs.pop(0))
+
         assert b.read_register("pc") == isr_addr  # Thumb bit handled by unicorn
         # EXC_RETURN thread/MSP value
         assert b.read_register("lr") == 0xFFFFFFF9

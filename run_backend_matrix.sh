@@ -64,16 +64,15 @@ FIRMWARES=(
 #                                 first 30 instructions; the firmware
 #                                 never reaches uart_write. PPC64 Book3S
 #                                 support in unicorn is incomplete.
-#   cortex_m_irq/unicorn        – peripheral_server's IRQ thread races
-#                                 the dispatch loop's emu_start; setting
-#                                 PC/SP/LR mid-emulation triggers
-#                                 UC_ERR_INSN_INVALID. Needs a
-#                                 stop-then-resume helper around the
-#                                 synthetic exception frame setup.
-#   cortex_m_irq/ghidra         – same race; Ghidra raises
-#                                 IllegalStateException("emulator is not
-#                                 STOPPED") on the cross-thread setContext
-#                                 call from peripheral_server.
+#   cortex_m_irq/ghidra         – Ghidra's EmulatorHelper.run() blocks
+#                                 the dispatch thread, and setHalt()
+#                                 from peripheral_server doesn't
+#                                 reliably break it out on a tight
+#                                 polling loop. Needs a step-mode
+#                                 cont() that polls pending_irqs each
+#                                 iteration; left as follow-up so we
+#                                 don't pay the Ghidra step-mode
+#                                 perf cost on every cortex-m run.
 #   cortex_m_irq/renode         – `sysbus.cpu OnGPIO 17 True` is accepted
 #                                 by Renode's monitor but the NVIC line
 #                                 wiring on the in-tree platform doesn't
@@ -86,7 +85,6 @@ SKIP_PAIRS=(
   "multi_arch_mips/renode"
   "multi_arch_ppc64/qemu"
   "multi_arch_ppc64/unicorn"
-  "cortex_m_irq/unicorn"
   "cortex_m_irq/renode"
   "cortex_m_irq/ghidra"
 )
