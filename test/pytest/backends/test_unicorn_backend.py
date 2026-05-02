@@ -91,18 +91,37 @@ class TestUnicornBackendInterface:
             b.inject_irq(5)
         assert "vector table slot" in caplog.text
 
-    def test_inject_irq_non_cortex_m_is_noop(self, caplog):
-        """On non-cortex-m archs, inject_irq just warns — we don't have
-        an in-process interrupt model for ARMv7A / ARM64 / MIPS / PPC."""
+    def test_inject_irq_non_cortex_m_routes_through_controller(self):
+        """On non-cortex-m archs, inject_irq falls through to
+        HalBackend.inject_irq, which uses the configured IrqController.
+        Without a controller attached, it raises IrqConfigError so the
+        caller sees a clear "no controller configured" message instead
+        of a silent no-op."""
         from halucinator.backends.hal_backend import MemoryRegion
         from halucinator.backends.unicorn_backend import UnicornBackend
-        import logging
+        from halucinator.backends.irq import IrqConfigError
         b = UnicornBackend(arch="arm64")
         b.add_memory_region(MemoryRegion("ram", 0x40000000, 0x1000, "rw"))
         b.init()
-        with caplog.at_level(logging.WARNING):
+        with pytest.raises(IrqConfigError, match="no interrupt controller"):
             b.inject_irq(5)
-        assert "only cortex-m3" in caplog.text
+
+    def test_inject_irq_non_cortex_m_with_controller_attached(self):
+        """When the user configured a GIC controller, inject_irq routes
+        through it and the GICD MMIO write happens on the unicorn
+        engine (visible via read_memory)."""
+        from halucinator.backends.hal_backend import MemoryRegion
+        from halucinator.backends.unicorn_backend import UnicornBackend
+        from halucinator.backends.irq.gic import GicController
+        b = UnicornBackend(arch="arm64")
+        # Map space the GICD will write into.
+        b.add_memory_region(MemoryRegion("gicd", 0x08000000, 0x10000, "rw"))
+        b.add_memory_region(MemoryRegion("ram",  0x40000000, 0x1000,  "rw"))
+        b.init()
+        b.set_irq_controller(GicController(gicd_base=0x08000000, version=2))
+        b.inject_irq(33)  # SPI 33 → ISPENDR1 bit 1
+        # GICD_ISPENDR1 at gicd_base + 0x200 + 4 = 0x08000204
+        assert b.read_memory(0x08000204, 4, 1) == (1 << 1)
 
     def test_inject_irq_enters_isr_on_cortex_m(self):
         """With a vector table installed, inject_irq pushes an exception
