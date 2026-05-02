@@ -525,10 +525,28 @@ class RenodeBackend(ARM32HalMixin, HalBackend):
     # ------------------------------------------------------------------
 
     def inject_irq(self, irq_num: int) -> None:
-        # Renode's Monitor call depends on the CPU type; for a simple NVIC
-        # on cortex-m, `sysbus.nvic OnGPIO <irq> True` triggers the IRQ.
-        # Callers that need different wiring should override.
-        try:
-            self._monitor.execute(f"sysbus.cpu OnGPIO {irq_num} True")
-        except Exception as exc:  # noqa: BLE001
-            log.warning("inject_irq(%d): %s", irq_num, exc)
+        """Trigger external IRQ *irq_num* on the running Renode machine.
+
+        Cortex-M targets receive IRQs through the NVIC: external IRQ N
+        is exposed as GPIO input N on the `nvic` peripheral, which our
+        platform description wires to the CPU.
+
+        ARMv8A (and other GIC-backed targets) drive the GIC's input
+        lines. PPC sends GPIO directly to the CPU.
+        """
+        targets: List[str]
+        if self.arch == "cortex-m3":
+            targets = ["sysbus.nvic"]
+        elif self.arch == "arm64":
+            targets = ["sysbus.gic"]
+        else:
+            targets = ["sysbus.cpu"]
+        for target in targets:
+            try:
+                # Pulse: assert then deassert so the CPU sees an edge.
+                self._monitor.execute(f"{target} OnGPIO {int(irq_num)} True")
+                self._monitor.execute(f"{target} OnGPIO {int(irq_num)} False")
+                return
+            except Exception as exc:  # noqa: BLE001
+                log.warning("inject_irq(%d) via %s: %s",
+                            irq_num, target, exc)

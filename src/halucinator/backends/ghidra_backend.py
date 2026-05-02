@@ -336,60 +336,86 @@ class GhidraBackend(ARM32HalMixin, HalBackend):
             raise RuntimeError("Call GhidraBackend.init() first")
         self._stopped = False
         from ghidra.util.task import TaskMonitor  # type: ignore
-        # Drain-and-loop: a setHalt issued from inject_irq breaks out
-        # of run(), but we don't want it to surface to the dispatch
-        # loop — apply the queued IRQ and re-enter run() instead.
-        # Loop exits only on a real breakpoint hit, watchpoint hit,
-        # or external stop().
-        while True:
+        # cortex-m3 firmwares can pend an IRQ from another thread,
+        # which we must apply between instructions (Ghidra can't write
+        # registers while the emulator is running). Watchpoints also
+        # require single-stepping. In both cases we run in step-mode
+        # and poll the queue every N instructions.
+        irq_poll = (self.arch == "cortex-m3")
+        if self._watchpoints or irq_poll:
+            self._emulator.enableMemoryWriteTracking(bool(self._watchpoints))
+            self._step_with_polling()
+            return
+        # Fast path: no IRQ source attached, no watchpoints. run() to
+        # the next breakpoint or fault.
+        hit = self._emulator.run(TaskMonitor.DUMMY)
+        exec_addr = self._emulator.getExecutionAddress()
+        pc = int(exec_addr.getUnsignedOffset()) if exec_addr is not None else 0
+        self._bp_hit_addr = pc
+        if hit:
+            return
+        if self._stopped:
+            return
+        state = str(self._emulator.getEmulateExecutionState())
+        err = str(self._emulator.getLastError() or "")
+        log.error(
+            "GhidraBackend: cont() stopped at pc=0x%x state=%s%s",
+            pc, state, f" err={err!r}" if err else "",
+        )
+
+    # Number of instructions to step between IRQ-queue polls. Larger
+    # batches are faster; smaller batches make IRQ delivery latency
+    # tighter. 256 is roughly the firmware-polling-loop length.
+    _STEP_BATCH = 256
+
+    def _step_with_polling(self) -> None:
+        """Step the emulator instruction-by-instruction, draining the
+        IRQ queue and checking breakpoints / watchpoints between
+        chunks. Returns on a real breakpoint or watchpoint hit, on
+        external stop(), or when the firmware enters an
+        unrecoverable state."""
+        from ghidra.util.task import TaskMonitor  # type: ignore
+        while not self._stopped:
+            # Apply any IRQs queued from another thread before
+            # stepping further — write_register requires the emulator
+            # to be in STOPPED state, which it is between step() calls.
             while self._pending_irqs:
                 self._apply_pending_irq(self._pending_irqs.pop(0))
-                # setHalt(True) latches; clear it so the next run()
-                # actually executes instructions.
-                try:
-                    self._emulator.setHalt(False)
-                except Exception:  # noqa: BLE001
-                    pass
-            if self._watchpoints:
-                # Step-mode: run one instruction at a time and check
-                # tracked writes against active write-watchpoints.
-                self._emulator.enableMemoryWriteTracking(True)
-                while not self._stopped and not self._pending_irqs:
-                    self._emulator.step(TaskMonitor.DUMMY)
-                    state = str(self._emulator.getEmulateExecutionState())
-                    if state != "STOPPED" and state != "BREAKPOINT":
-                        break
+            for _ in range(self._STEP_BATCH):
+                if not self._emulator.step(TaskMonitor.DUMMY):
+                    # If the firmware just ran `bx lr` with LR holding
+                    # an EXC_RETURN magic, Ghidra raises a decode
+                    # FAULT at PC=0xFFFFFFFx. Pop the synthetic
+                    # exception frame and resume.
                     exec_addr = self._emulator.getExecutionAddress()
                     pc = (int(exec_addr.getUnsignedOffset())
                           if exec_addr is not None else 0)
-                    if pc in self._breakpoints:
-                        self._bp_hit_addr = pc
-                        return
-                    if self._check_watchpoints():
-                        return
-                hit = False
-            else:
-                hit = self._emulator.run(TaskMonitor.DUMMY)
-            exec_addr = self._emulator.getExecutionAddress()
-            pc = int(exec_addr.getUnsignedOffset()) if exec_addr is not None else 0
-            self._bp_hit_addr = pc
-            if hit:
-                return
-            # run() returned without a real hit. If an inject_irq
-            # queued an IRQ in the meantime, apply and resume; if the
-            # caller asked us to stop, honour that; otherwise log and
-            # exit (firmware ran off the rails).
-            if self._pending_irqs:
-                continue
-            if self._stopped:
-                return
-            state = str(self._emulator.getEmulateExecutionState())
-            err = str(self._emulator.getLastError() or "")
-            log.error(
-                "GhidraBackend: cont() stopped at pc=0x%x state=%s%s",
-                pc, state, f" err={err!r}" if err else "",
-            )
-            return
+                    if self._maybe_handle_exc_return(pc):
+                        # Clear the latched fault state and continue
+                        # stepping at the restored PC.
+                        try:
+                            self._emulator.setHalt(False)
+                        except Exception:  # noqa: BLE001
+                            pass
+                        break
+                    state = str(self._emulator.getEmulateExecutionState())
+                    err = str(self._emulator.getLastError() or "")
+                    log.error(
+                        "GhidraBackend: step() returned False "
+                        "state=%s%s", state,
+                        f" err={err!r}" if err else "",
+                    )
+                    return
+                exec_addr = self._emulator.getExecutionAddress()
+                pc = (int(exec_addr.getUnsignedOffset())
+                      if exec_addr is not None else 0)
+                if pc in self._breakpoints:
+                    self._bp_hit_addr = pc
+                    return
+                if self._watchpoints and self._check_watchpoints():
+                    return
+                if self._pending_irqs:
+                    break  # back to outer loop to drain
 
     def _check_watchpoints(self) -> bool:
         """Return True if any write-watchpoint fired since tracking was
@@ -524,15 +550,21 @@ class GhidraBackend(ARM32HalMixin, HalBackend):
             frame = struct.unpack("<8I", bytes(raw))
         except Exception:  # noqa: BLE001
             return False
-        self.write_register("r0", frame[0])
-        self.write_register("r1", frame[1])
-        self.write_register("r2", frame[2])
-        self.write_register("r3", frame[3])
-        self.write_register("r12", frame[4])
-        self.write_register("lr", frame[5])
-        self.write_register("pc", frame[6])
-        self.write_register("cpsr", frame[7])
-        self.write_register("sp", sp + 32)
+        # On exc_return Ghidra has already faulted on the
+        # 0xFFFFFFFx fetch — the emulator is in FAULT state, which
+        # rejects setContextRegister. Use the raw writeRegister path
+        # for everything (TMode stays Thumb from before the ISR).
+        from java.math import BigInteger  # type: ignore
+        for name, val in (
+            ("r0", frame[0]), ("r1", frame[1]), ("r2", frame[2]),
+            ("r3", frame[3]), ("r12", frame[4]), ("lr", frame[5]),
+            ("pc", frame[6] & ~1),
+            ("cpsr", frame[7]), ("sp", sp + 32),
+        ):
+            reg = self._resolve_register(name)
+            if reg is None:
+                continue
+            self._emulator.writeRegister(reg, BigInteger.valueOf(int(val)))
         log.info("GhidraBackend: exc_return — popped frame, resuming at 0x%x",
                  frame[6])
         return True

@@ -95,10 +95,17 @@ class TestRenodeBackend:
 
     def test_inject_irq_uses_monitor(self, backend):
         backend.inject_irq(5)
-        backend._monitor.execute.assert_called_once()
-        call_arg = backend._monitor.execute.call_args[0][0]
-        assert "5" in call_arg
-        assert "OnGPIO" in call_arg
+        # IRQ delivery on cortex-m goes through the NVIC peripheral
+        # and is asserted as a pulse (assert-then-deassert) so the
+        # CPU sees an edge.
+        assert backend._monitor.execute.call_count == 2
+        for call in backend._monitor.execute.call_args_list:
+            arg = call[0][0]
+            assert "OnGPIO" in arg
+            assert "5" in arg
+            assert "sysbus.nvic" in arg or "sysbus.cpu" in arg
+        assert "True" in backend._monitor.execute.call_args_list[0][0][0]
+        assert "False" in backend._monitor.execute.call_args_list[1][0][0]
 
     def test_first_cont_sends_c_then_start(self, backend):
         """The first cont() queues GDB `c` and then un-pauses the machine
