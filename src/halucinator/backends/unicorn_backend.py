@@ -677,11 +677,30 @@ class UnicornBackend(ARMHalMixin, HalBackend):
         normal write_memory and the next cont() will take the
         exception when the firmware unmasks.
         """
-        if self.arch_name not in ("cortex-m3", "arm"):
+        if self.arch_name not in ("cortex-m3", "arm", "arm64"):
             super().inject_irq(irq_num)
             return
         if self._uc is None:
             raise RuntimeError("Call UnicornBackend.init() first")
+        # On arm/arm64, the IrqController MMIO write (GICD_ISPENDR
+        # for arm/arm64, NVIC_ISPR for cortex-m3) is still useful —
+        # firmware that polls those registers should see the bit
+        # set. Cortex-m3's _apply_pending_irq always synthesises the
+        # exception, so skip the controller MMIO there. For arm /
+        # arm64 we emit both: real GIC writes happen through the
+        # controller, and the synthetic exception entry fires from
+        # cont().
+        if self.arch_name in ("arm", "arm64"):
+            ctrl = getattr(self, "_irq_controller", None)
+            if ctrl is None:
+                from halucinator.backends.irq import IrqConfigError
+                raise IrqConfigError(
+                    f"UnicornBackend(arch={self.arch_name!r}) has no "
+                    "interrupt controller configured. Set "
+                    "machine.interrupt_controller in the YAML or call "
+                    "set_irq_controller() before inject_irq()."
+                )
+            ctrl.trigger(self, irq_num)
         # Cross-thread safe: list.append() + emu_stop are atomic from
         # Python's perspective. The dispatch thread will see the
         # pending entry on its next cont() call.
@@ -699,6 +718,9 @@ class UnicornBackend(ARMHalMixin, HalBackend):
             return
         if self.arch_name == "arm":
             self._apply_pending_irq_armv7a(irq_num)
+            return
+        if self.arch_name == "arm64":
+            self._apply_pending_irq_arm64(irq_num)
             return
 
         # Vector table offset: caller plumbs it in via set_vtor(); fall
@@ -807,6 +829,60 @@ class UnicornBackend(ARMHalMixin, HalBackend):
         self.write_register("pc", vbar + 0x18)
         log.info("inject_irq(%d): ARMv7-A entry @ 0x%x, return=0x%x",
                  irq_num, vbar + 0x18, return_pc)
+
+    def _apply_pending_irq_arm64(self, irq_num: int) -> None:
+        """Synthesise an AArch64 IRQ entry for in-process unicorn.
+
+        Unicorn's ARM64 model doesn't fully implement EL1 vector
+        delivery + ERET. Instead, the firmware exposes a plain
+        ``_irq_entry_simple`` trampoline that follows AAPCS: receives
+        LR = interrupted PC, calls IRQ_Handler, returns via plain
+        ``ret``. The IrqController carries the trampoline address
+        as ``irq_simple_entry``; if that's not set we fall back to
+        VBAR_EL1 + 0x280 which assumes a real CPU exception model.
+        """
+        ctrl = getattr(self, "_irq_controller", None)
+        gicc_base = getattr(ctrl, "gicc_base", None) if ctrl else None
+        irq_simple = (getattr(ctrl, "irq_simple_entry", None)
+                      if ctrl else None)
+
+        # Stash the IRQ ID into GICC_IAR shadow.
+        if gicc_base is not None:
+            try:
+                self._uc.mem_write(
+                    gicc_base + 0x0C,
+                    int(irq_num).to_bytes(4, "little"),
+                )
+            except Exception:  # noqa: BLE001
+                pass
+
+        if irq_simple is not None:
+            # AAPCS-style trampoline: LR = return PC, jump to entry.
+            return_pc = self.read_register("pc")
+            self.write_register("lr", return_pc)
+            self.write_register("pc", int(irq_simple))
+            log.info(
+                "inject_irq(%d): AArch64 trampoline @ 0x%x, return=0x%x",
+                irq_num, irq_simple, return_pc,
+            )
+            return
+
+        # Fallback: try the real-CPU vector path. Unlikely to work
+        # under unicorn but keep it as a documented hook.
+        try:
+            vbar = self.read_register("vbar_el1")
+        except Exception:  # noqa: BLE001
+            vbar = getattr(self, "_vtor", 0)
+        return_pc = self.read_register("pc")
+        try:
+            self.write_register("elr_el1", return_pc)
+        except Exception:  # noqa: BLE001
+            pass
+        self.write_register("pc", vbar + 0x280)
+        log.warning(
+            "inject_irq(%d): AArch64 vector entry at 0x%x — Unicorn "
+            "may not honour ERET on return", irq_num, vbar + 0x280,
+        )
 
     def _maybe_handle_exc_return(self, addr: int) -> bool:
         """Called from the invalid-fetch hook. If the fetch address looks
