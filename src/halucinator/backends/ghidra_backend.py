@@ -414,22 +414,22 @@ class GhidraBackend(ARM32HalMixin, HalBackend):
         self._vtor = vtor
 
     def inject_irq(self, irq_num: int) -> None:
-        """Deliver an external IRQ to a cortex-m CPU.
+        """Deliver an external IRQ.
 
-        Mirrors UnicornBackend.inject_irq: push an 8-word exception
-        frame (r0–r3, r12, lr, pc, xpsr) onto the main stack, set LR to
-        the thread-mode/MSP EXC_RETURN magic, and jump PC to the ISR
-        address from the vector table.
+        Cortex-M3 fast-path: software-synthesised exception frame
+        delivery — same as UnicornBackend. Mirrors what real Cortex-M
+        hardware does on entry (push r0-r3, r12, lr, pc, xpsr; set LR
+        to EXC_RETURN; jump PC to vector[16+N]). Skips the
+        controller-MMIO write — Ghidra's PCode emulator doesn't model
+        the NVIC peripheral.
 
-        Ghidra's PCode emulator doesn't model Cortex-M exception
-        delivery natively, so this is a software-synthesized transition
-        that the ISR code sees as if it were hardware-driven."""
+        Other arches fall through to HalBackend.inject_irq, which
+        routes through the configured IrqController via memory or
+        register writes; those go through the standard PCode emulator
+        memory state and the firmware sees them on the next cont().
+        """
         if self.arch not in ("cortex-m3",):
-            log.warning(
-                "GhidraBackend.inject_irq(%d): only cortex-m3 has an "
-                "in-process IRQ model; arch=%s is ignored",
-                irq_num, self.arch,
-            )
+            super().inject_irq(irq_num)
             return
         if self._emulator is None:
             raise RuntimeError("Call GhidraBackend.init() first")

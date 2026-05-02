@@ -699,6 +699,7 @@ def _emulate_with_qemu_backend(
 
     # periph_server.start() needs qemu.avatar.output_directory; graft it on.
     backend.avatar = avatar
+    backend.set_irq_controller(config.machine.build_irq_controller())
 
     # Step 6: apply PC/SP init (same rules as avatar2 path).
     config.initialize_target(backend)
@@ -892,6 +893,7 @@ def _emulate_with_unicorn_backend(
     # addresses. Graft a shim that exposes both.
     from types import SimpleNamespace
     backend.avatar = SimpleNamespace(output_directory=outdir, config=config)
+    backend.set_irq_controller(config.machine.build_irq_controller())
 
     # Apply PC/SP init.
     if config.machine.entry_addr is not None:
@@ -1107,6 +1109,7 @@ def _emulate_with_renode_backend(
 
     from types import SimpleNamespace
     backend.avatar = SimpleNamespace(output_directory=outdir, config=config)
+    backend.set_irq_controller(config.machine.build_irq_controller())
 
     # Skip config.initialize_target: PC/SP are already baked into the
     # .resc via cpu PC / cpu SP (set by RenodeBackend.set_initial_state
@@ -1202,6 +1205,7 @@ def _emulate_with_ghidra_backend(
 
     from types import SimpleNamespace
     backend.avatar = SimpleNamespace(output_directory=outdir, config=config)
+    backend.set_irq_controller(config.machine.build_irq_controller())
 
     if config.machine.entry_addr is not None:
         backend.regs.pc = config.machine.entry_addr

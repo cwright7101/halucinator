@@ -119,10 +119,18 @@ class Avatar2Backend(HalBackend):
     # ------------------------------------------------------------------
 
     def inject_irq(self, irq_num: int) -> None:
-        self.target.protocols.monitor.execute_command(
-            "avatar-armv7m-inject-irq",
-            {"num_irq": irq_num, "num_cpu": 0},
-        )
+        # Cortex-M3 fast-path: avatar-qemu's NVIC-aware QMP command
+        # integrates with the avatar-qemu watchman semantics
+        # (avatar-armv7m-ignore-irq-return / unignore-irq-return).
+        # For other arches we fall through to the generic
+        # IrqController path on HalBackend.
+        if getattr(self, "arch", None) == "cortex-m3":
+            self.target.protocols.monitor.execute_command(
+                "avatar-armv7m-inject-irq",
+                {"num_irq": irq_num, "num_cpu": 0},
+            )
+            return
+        super().inject_irq(irq_num)
 
     # ------------------------------------------------------------------
     # Shutdown

@@ -626,20 +626,22 @@ class UnicornBackend(ARMHalMixin, HalBackend):
                                      # an exception-return attempt
 
     def inject_irq(self, irq_num: int) -> None:
-        """Deliver an external IRQ to a cortex-m CPU. Pushes a minimal
-        exception frame (r0–r3, r12, lr, pc, xpsr) onto the main stack,
-        sets LR to the thread-mode / MSP EXC_RETURN magic, and sets PC
-        to the ISR address from the vector table.
+        """Deliver an external IRQ.
 
-        Other archs don't have a comparable in-process interrupt model —
-        use QEMUBackend or Avatar2Backend for those.
+        Cortex-M3 fast-path: synthesise the architectural exception
+        frame (r0–r3, r12, lr, pc, xpsr) on the main stack, set LR to
+        the thread-mode / MSP EXC_RETURN magic, jump PC to the ISR
+        from the vector table. Skips the controller-MMIO write —
+        unicorn doesn't have a real NVIC peripheral to receive it.
+
+        For other arches, fall through to HalBackend.inject_irq, which
+        routes through the configured IrqController (CP0 Cause for
+        MIPS, GICD MMIO for arm/arm64, OpenPIC IPIDR for PPC). MMIO
+        writes go through unicorn's normal write_memory and the next
+        cont() will take the exception when the firmware unmasks.
         """
         if self.arch_name != "cortex-m3":
-            log.warning(
-                "UnicornBackend.inject_irq(%d): only cortex-m3 has an "
-                "in-process IRQ model today. Arch=%s is ignored.",
-                irq_num, self.arch_name,
-            )
+            super().inject_irq(irq_num)
             return
         if self._uc is None:
             raise RuntimeError("Call UnicornBackend.init() first")

@@ -855,7 +855,13 @@ class QEMUBackend(ARM32HalMixin, HalBackend):
     # ------------------------------------------------------------------
 
     def inject_irq(self, irq_num: int) -> None:
-        self._qmp.execute(
-            "avatar-armv7m-inject-irq",
-            {"num_irq": irq_num, "num_cpu": 0},
-        )
+        # Cortex-M3 fast-path: same avatar-qemu QMP command Avatar2Backend
+        # uses; integrates with its NVIC + watchman semantics. Other
+        # arches fall through to the IrqController on HalBackend.
+        if getattr(self, "arch", None) == "cortex-m3":
+            self._qmp.execute(
+                "avatar-armv7m-inject-irq",
+                {"num_irq": irq_num, "num_cpu": 0},
+            )
+            return
+        super().inject_irq(irq_num)
