@@ -38,6 +38,7 @@ FIRMWARES=(
   "cortex_m_irq|/root/halucinator|IRQ 17 FIRED|45"
   "arm32_irq|/root/halucinator|IRQ 33 FIRED|45"
   "arm64_irq|/root/halucinator|IRQ 33 FIRED|45"
+  "mips_irq|/root/halucinator|MIPS IRQ test PASSED|45"
 )
 
 # firmware/backend pairs the local image can't run end-to-end. Reported
@@ -101,6 +102,10 @@ SKIP_PAIRS=(
   "arm64_irq/qemu"
   "arm64_irq/ghidra"
   "arm64_irq/renode"
+  "mips_irq/avatar2"
+  "mips_irq/qemu"
+  "mips_irq/ghidra"
+  "mips_irq/renode"
 )
 
 is_skip() {
@@ -147,6 +152,7 @@ for FW_SPEC in "${FIRMWARES[@]}"; do
     cortex_m_irq)           RUNCMD="bash test/multi_arch_irq/cortex_m/run_tests.bash" ;;
     arm32_irq)              RUNCMD="bash test/multi_arch_irq/arm32/run_tests.bash" ;;
     arm64_irq)              RUNCMD="bash test/multi_arch_irq/arm64/run_tests.bash" ;;
+    mips_irq)               RUNCMD="bash test/multi_arch_irq/mips/run_tests.bash" ;;
   esac
   for EMU in "${BACKENDS[@]}"; do
     LOG=".matrix_logs/${NAME}__${EMU}.log"

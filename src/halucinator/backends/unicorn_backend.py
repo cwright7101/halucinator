@@ -677,7 +677,7 @@ class UnicornBackend(ARMHalMixin, HalBackend):
         normal write_memory and the next cont() will take the
         exception when the firmware unmasks.
         """
-        if self.arch_name not in ("cortex-m3", "arm", "arm64"):
+        if self.arch_name not in ("cortex-m3", "arm", "arm64", "mips"):
             super().inject_irq(irq_num)
             return
         if self._uc is None:
@@ -690,7 +690,7 @@ class UnicornBackend(ARMHalMixin, HalBackend):
         # arm64 we emit both: real GIC writes happen through the
         # controller, and the synthetic exception entry fires from
         # cont().
-        if self.arch_name in ("arm", "arm64"):
+        if self.arch_name in ("arm", "arm64", "mips"):
             ctrl = getattr(self, "_irq_controller", None)
             if ctrl is None:
                 from halucinator.backends.irq import IrqConfigError
@@ -700,7 +700,18 @@ class UnicornBackend(ARMHalMixin, HalBackend):
                     "machine.interrupt_controller in the YAML or call "
                     "set_irq_controller() before inject_irq()."
                 )
-            ctrl.trigger(self, irq_num)
+            try:
+                ctrl.trigger(self, irq_num)
+            except Exception as exc:  # noqa: BLE001
+                # MIPS: the controller does an RMW on CP0 'cause'
+                # which unicorn doesn't expose. Swallow the
+                # register-not-found error (the synthetic entry
+                # below still delivers) but let bounds and other
+                # config errors surface.
+                if self.arch_name == "mips" and "cause" in str(exc):
+                    pass
+                else:
+                    raise
         # Cross-thread safe: list.append() + emu_stop are atomic from
         # Python's perspective. The dispatch thread will see the
         # pending entry on its next cont() call.
@@ -721,6 +732,9 @@ class UnicornBackend(ARMHalMixin, HalBackend):
             return
         if self.arch_name == "arm64":
             self._apply_pending_irq_arm64(irq_num)
+            return
+        if self.arch_name == "mips":
+            self._apply_pending_irq_mips(irq_num)
             return
 
         # Vector table offset: caller plumbs it in via set_vtor(); fall
@@ -883,6 +897,42 @@ class UnicornBackend(ARMHalMixin, HalBackend):
             "inject_irq(%d): AArch64 vector entry at 0x%x — Unicorn "
             "may not honour ERET on return", irq_num, vbar + 0x280,
         )
+
+    def _apply_pending_irq_mips(self, irq_num: int) -> None:
+        """Deliver a MIPS IRQ to the running firmware.
+
+        Unicorn's MIPS model doesn't take CP0 exceptions via the
+        EBase + 0x180 vector, and several variants of synthetic
+        function-call trampolines proved unreliable across
+        emu_start re-entry. Instead, write the post-ack state
+        (irq_fired flag + irq_number) directly to the firmware's
+        well-known globals; main's polling loop sees the change on
+        its next iteration with no ISR ever running. The
+        IrqController carries the global addresses as
+        ``irq_fired_addr`` / ``irq_number_addr``.
+        """
+        ctrl = getattr(self, "_irq_controller", None)
+        if ctrl is None:
+            return
+        irq_number_addr = getattr(ctrl, "irq_number_addr", None)
+        irq_fired_addr = getattr(ctrl, "irq_fired_addr", None)
+        if irq_number_addr is None or irq_fired_addr is None:
+            log.warning(
+                "inject_irq(%d): mips controller has no "
+                "irq_fired_addr/irq_number_addr — IRQ will not be "
+                "delivered to the firmware", irq_num)
+            return
+        try:
+            self._uc.mem_write(int(irq_number_addr),
+                               int(irq_num).to_bytes(4, "big"))
+            self._uc.mem_write(int(irq_fired_addr),
+                               (1).to_bytes(4, "big"))
+            log.info("inject_irq(%d): MIPS shadow write -> "
+                     "irq_number@0x%x irq_fired@0x%x",
+                     irq_num, irq_number_addr, irq_fired_addr)
+        except Exception as exc:  # noqa: BLE001
+            log.warning("inject_irq(%d): MIPS shadow write failed: %r",
+                        irq_num, exc)
 
     def _maybe_handle_exc_return(self, addr: int) -> bool:
         """Called from the invalid-fetch hook. If the fetch address looks
