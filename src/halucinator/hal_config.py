@@ -201,8 +201,10 @@ class HALMachineConfig:
                 "machine.interrupt_controller: missing required `type` key. "
                 "One of: cortex_m, gicv2, gicv3, mips, openpic."
             )
-        known = {"type", "gicd_base", "openpic_base"}
+        known = {"type", "gicd_base", "gicc_base", "openpic_base"}
         options = {k: v for k, v in spec.items() if k not in known}
+        if spec.get("gicc_base") is not None:
+            options.setdefault("gicc_base", spec["gicc_base"])
         return IrqControllerSpec(
             type=spec["type"],
             gicd_base=spec.get("gicd_base"),
