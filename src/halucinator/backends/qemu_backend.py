@@ -867,4 +867,19 @@ class QEMUBackend(ARM32HalMixin, HalBackend):
                 {"num-irq": int(irq_num) + 16, "num-cpu": 0},
             )
             return
-        super().inject_irq(irq_num)
+        # Other arches use the IrqController via super().inject_irq
+        # which writes MMIO through self.write_memory. GDB rejects
+        # memory writes while the target is running, so stop+resume
+        # around the IrqController call.
+        try:
+            self._gdb.stop()
+            self._gdb.wait_for_stop(timeout=2.0)
+        except Exception:  # noqa: BLE001
+            pass
+        try:
+            super().inject_irq(irq_num)
+        finally:
+            try:
+                self._gdb.cont()
+            except Exception:  # noqa: BLE001
+                pass

@@ -96,8 +96,6 @@ SKIP_PAIRS=(
   "multi_arch_mips/renode"
   "multi_arch_ppc64/qemu"
   "multi_arch_ppc64/unicorn"
-  "arm32_irq/avatar2"
-  "arm32_irq/qemu"
   "arm32_irq/ghidra"
   "arm32_irq/renode"
   "arm64_irq/avatar2"

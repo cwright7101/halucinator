@@ -20,8 +20,8 @@ sleep 2
 rm -f ./hal_out.txt
 rm -rf tmp/arm32_irq_test
 
-PYTHONUNBUFFERED=1 ${HALUCINATOR_QEMU_ARM:+HALUCINATOR_QEMU_ARM="$HALUCINATOR_QEMU_ARM"} \
-    bash ./test/multi_arch_irq/arm32/run.sh </dev/null \
+[ -n "${HALUCINATOR_QEMU_ARM:-}" ] && export HALUCINATOR_QEMU_ARM
+PYTHONUNBUFFERED=1 bash ./test/multi_arch_irq/arm32/run.sh </dev/null \
     > hal_out.txt 2>&1 &
 HAL_PID=$!
 

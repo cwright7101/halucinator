@@ -14,7 +14,7 @@ import logging
 import struct
 from typing import Any, Dict, List, Optional, Set, Tuple, Union
 
-from avatar2 import QemuTarget
+from avatar2 import QemuTarget, TargetStates
 
 from halucinator import hal_log
 from halucinator.bp_handlers import intercepts
@@ -83,6 +83,43 @@ class ARMQemuTarget(QemuTarget):
         self._init_halucinator_heap()
         self.calls_memory_blocks: Dict[Any, Any] = {}
         self.REGISTER_IRQ_OFFSET: int = 4  # pylint: disable=invalid-name
+
+    def inject_irq(self, irq_num: int) -> None:
+        """Generic ARM-A inject_irq for the legacy avatar2 path.
+
+        Routes through the IrqController declared in
+        ``machine.interrupt_controller``: the GicController writes
+        GICD_ISPENDR, and avatar-qemu's configurable machine —
+        when the YAML declares ``qemu_name: arm_gic`` with the
+        GIC's parent_irq wired to the CPU's IRQ input — propagates
+        that to the running CPU as an exception.
+
+        Falls back to the legacy ``irq_set_qmp`` (halucinator-irq
+        QOM device) when no IrqController is configured, which
+        keeps the existing cortex-m flow working.
+        """
+        cfg = getattr(self.avatar, "config", None)
+        machine_cfg = getattr(cfg, "machine", None) if cfg else None
+        spec = getattr(machine_cfg, "interrupt_controller", None) \
+            if machine_cfg else None
+        if spec is not None:
+            from halucinator.backends.irq import build_irq_controller
+            ctrl = build_irq_controller(machine_cfg.arch, spec)
+            if ctrl is not None:
+                # avatar2's GDB write_memory requires the CPU to
+                # be stopped. Pause -> trigger -> resume.
+                was_running = (self.state == TargetStates.RUNNING)
+                if was_running:
+                    self.stop()
+                    self.wait()
+                try:
+                    ctrl.trigger(self, int(irq_num))
+                finally:
+                    if was_running:
+                        self.cont()
+                return
+        # Legacy halucinator-irq QOM path.
+        self.irq_set_qmp(int(irq_num))
 
     def read_string(self, addr: int, max_len: int = 256) -> str:
         """
