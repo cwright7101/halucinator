@@ -12,7 +12,8 @@ sleep 2
 rm -f ./hal_out.txt
 rm -rf tmp/mips_irq_test
 
-PYTHONUNBUFFERED=1 ${HALUCINATOR_QEMU_MIPS:+HALUCINATOR_QEMU_MIPS="$HALUCINATOR_QEMU_MIPS"} \
+[ -n "${HALUCINATOR_QEMU_MIPS:-}" ] && export HALUCINATOR_QEMU_MIPS
+PYTHONUNBUFFERED=1 \
     bash ./test/multi_arch_irq/mips/run.sh </dev/null \
     > hal_out.txt 2>&1 &
 HAL_PID=$!

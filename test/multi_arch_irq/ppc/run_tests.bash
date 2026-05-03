@@ -12,7 +12,8 @@ sleep 2
 rm -f ./hal_out.txt
 rm -rf tmp/ppc_irq_test
 
-PYTHONUNBUFFERED=1 ${HALUCINATOR_QEMU_PPC:+HALUCINATOR_QEMU_PPC="$HALUCINATOR_QEMU_PPC"} \
+[ -n "${HALUCINATOR_QEMU_PPC:-}" ] && export HALUCINATOR_QEMU_PPC
+PYTHONUNBUFFERED=1 \
     bash ./test/multi_arch_irq/ppc/run.sh </dev/null \
     > hal_out.txt 2>&1 &
 HAL_PID=$!

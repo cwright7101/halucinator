@@ -25,6 +25,7 @@ class HalMemConfig(object):
         qemu_name: Optional[str] = None,
         properties: Optional[Dict[str, Any]] = None,
         irq: Optional[Any] = None,
+        regions: Optional[Any] = None,
     ) -> None:
         '''
             Reads in config
@@ -40,6 +41,12 @@ class HalMemConfig(object):
         self.qemu_name: Optional[str] = qemu_name
         self.irq_config: Optional[Any] = irq
         self.properties: Optional[Dict[str, Any]] = properties
+        # Multi-region MMIO mapping for sysbus devices that expose
+        # more than one region (e.g. arm_gic: distributor + cpu
+        # interface). Format: list of {region: int, address: int}.
+        # Region 0 is implicitly mapped at base_addr; entries here
+        # cover any additional regions (region: 1, 2, ...).
+        self.regions: Optional[Any] = regions
 
         if self.file != None:
             self.get_full_path()

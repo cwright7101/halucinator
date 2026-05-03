@@ -172,6 +172,7 @@ def setup_memory(
         qemu_name=memory.qemu_name,
         irq=memory.irq_config,
         qemu_properties=memory.properties,
+        regions=memory.regions,
     )
 
     if record_memories is not None:
