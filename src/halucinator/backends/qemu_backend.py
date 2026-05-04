@@ -866,6 +866,15 @@ class QEMUBackend(ARM32HalMixin, HalBackend):
                 {"num-irq": int(irq_num) + 16, "num-cpu": 0},
             )
             return
+        # ARM/AArch64 fast-path: pulse the GIC's SPI line directly
+        # via avatar-arm-inject-irq. Bypasses the GDB-write_memory
+        # GIC_ISPENDR path which can race with the live target.
+        if arch in ("arm", "arm64"):
+            self._qmp.execute(
+                "avatar-arm-inject-irq",
+                {"num-irq": int(irq_num), "num-cpu": 0},
+            )
+            return
         # MIPS fast-path: avatar-qemu pulses the CPU's int_pin via
         # avatar-mips-inject-irq, which goes straight to the
         # standard MIPS interrupt path. No IrqController MMIO

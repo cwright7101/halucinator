@@ -133,6 +133,12 @@ class Avatar2Backend(HalBackend):
                 args={"num-irq": int(irq_num) + 16, "num-cpu": 0},
             )
             return
+        if arch in ("arm", "arm64"):
+            mon.execute_command(
+                "avatar-arm-inject-irq",
+                args={"num-irq": int(irq_num), "num-cpu": 0},
+            )
+            return
         if arch == "mips":
             mon.execute_command(
                 "avatar-mips-inject-irq",
