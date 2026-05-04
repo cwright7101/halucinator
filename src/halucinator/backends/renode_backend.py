@@ -550,9 +550,13 @@ class RenodeBackend(ARM32HalMixin, HalBackend):
         targets: List[str]
         if self.arch == "cortex-m3":
             targets = ["sysbus.nvic"]
-        elif self.arch == "arm64":
-            targets = ["sysbus.gic"]
         else:
+            # arm/arm64/ppc/ppc64: route through the CPU. For
+            # arm/arm64 the GIC is wired as
+            # `genericInterruptController: gic` on the CPU, and
+            # CPU.ARMv7A / CPU.ARMv8A forward GPIO assertions to
+            # the GIC's SPI inputs. For PPC the CPU's external
+            # IRQ input picks up the assertion.
             targets = ["sysbus.cpu"]
         for target in targets:
             try:

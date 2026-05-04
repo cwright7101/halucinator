@@ -13,6 +13,8 @@ machine:
     # exception model (unicorn/ghidra) jump to on synthetic IRQ
     # delivery. Must follow AAPCS — receives LR=interrupted PC.
     irq_simple_entry: 0x00000884
+    irq_number_addr: 0x4000014c
+    irq_fired_addr:  0x40000148
 
 intercepts:
 - class: halucinator.bp_handlers.generic.test_uart.TestUART

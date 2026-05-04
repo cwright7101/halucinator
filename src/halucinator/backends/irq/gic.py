@@ -56,6 +56,8 @@ class GicController(IrqController):
         version: int = 2,
         gicc_base: int | None = None,
         irq_simple_entry: int | None = None,
+        irq_fired_addr: int | None = None,
+        irq_number_addr: int | None = None,
         options: Dict[str, Any] | None = None,
     ) -> None:
         if version not in (2, 3):
@@ -73,6 +75,14 @@ class GicController(IrqController):
         # firmware exposes a callable trampoline (LR = interrupted
         # PC, PC = irq_simple_entry, return via plain `ret`).
         self.irq_simple_entry = irq_simple_entry
+        # Shadow-state addresses for in-process backends that
+        # bypass the firmware ISR entirely and just write the
+        # post-ack globals — same convention as MipsController /
+        # OpenPicController. The arm/arm64 firmware corpus
+        # exposes irq_fired / irq_number at known addresses; the
+        # in-process Ghidra path uses these for delivery.
+        self.irq_fired_addr = irq_fired_addr
+        self.irq_number_addr = irq_number_addr
         self.version = version
         self.options = options or {}
         self.name = f"gicv{version}"
