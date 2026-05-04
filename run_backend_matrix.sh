@@ -93,26 +93,9 @@ FIRMWARES=(
 #                                works because it ships the NVIC line).
 SKIP_PAIRS=(
   "STM32_Hyperterminal/renode"
-  "multi_arch_mips/renode"
   "multi_arch_ppc64/qemu"
   "multi_arch_ppc64/unicorn"
-  "arm32_irq/ghidra"
-  "arm32_irq/renode"
-  "arm64_irq/ghidra"
-  "arm64_irq/renode"
-  "mips_irq/avatar2"
-  "mips_irq/qemu"
-  "mips_irq/ghidra"
-  "mips_irq/renode"
-  "ppc_irq/avatar2"
-  "ppc_irq/qemu"
-  "ppc_irq/ghidra"
-  "ppc_irq/renode"
-  "ppc64_irq/avatar2"
-  "ppc64_irq/qemu"
   "ppc64_irq/unicorn"
-  "ppc64_irq/ghidra"
-  "ppc64_irq/renode"
 )
 
 is_skip() {

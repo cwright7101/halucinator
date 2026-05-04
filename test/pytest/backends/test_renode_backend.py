@@ -55,13 +55,14 @@ class TestRenodeBackend:
         assert issubclass(RenodeBackend, HalBackend)
 
     def test_arch_map_covers_renode_supported_archs(self):
-        # mips is intentionally missing — the Renode linux-arm64-dotnet-
-        # portable release doesn't ship a MIPS CPU class.
+        # Renode 1.16+ ships CPU.MIPS in the linux-arm64-dotnet-portable
+        # release, so mips is now a first-class arch in the map.
         assert "cortex-m3" in _ARCH_MAP
+        assert "arm" in _ARCH_MAP
         assert "arm64" in _ARCH_MAP
+        assert "mips" in _ARCH_MAP
         assert "powerpc" in _ARCH_MAP
         assert "ppc64" in _ARCH_MAP
-        assert "mips" not in _ARCH_MAP
 
     def test_read_register_delegates_to_gdb(self, backend):
         backend._gdb.read_register.return_value = 0xCAFE
