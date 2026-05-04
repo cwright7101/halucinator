@@ -197,6 +197,8 @@ class GhidraBackend(ARM32HalMixin, HalBackend):
         if self.arch in ("cortex-m3", "arm"):
             self._patch_arm_setISAMode()
             self._patch_arm_unimplemented_callothers()
+        elif self.arch == "arm64":
+            self._patch_arm_unimplemented_callothers()
 
     def shutdown(self) -> None:
         if self._emulator is not None:
