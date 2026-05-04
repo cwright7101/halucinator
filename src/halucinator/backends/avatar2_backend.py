@@ -119,20 +119,36 @@ class Avatar2Backend(HalBackend):
     # ------------------------------------------------------------------
 
     def inject_irq(self, irq_num: int) -> None:
+        arch = getattr(self, "arch", None)
+        mon = self.target.protocols.monitor
         # Cortex-M3 fast-path: avatar-qemu's NVIC-aware QMP command
         # integrates with the avatar-qemu watchman semantics
         # (avatar-armv7m-ignore-irq-return / unignore-irq-return).
-        # For other arches we fall through to the generic
-        # IrqController path on HalBackend.
-        if getattr(self, "arch", None) == "cortex-m3":
+        if arch == "cortex-m3":
             # avatar-armv7m-inject-irq takes a full Cortex-M exception
             # number; the halucinator API takes external IRQ numbers,
             # so add the 16-system-exception offset.
-            self.target.protocols.monitor.execute_command(
+            mon.execute_command(
                 "avatar-armv7m-inject-irq",
                 args={"num-irq": int(irq_num) + 16, "num-cpu": 0},
             )
             return
+        if arch == "mips":
+            mon.execute_command(
+                "avatar-mips-inject-irq",
+                args={"num-irq": int(irq_num), "num-cpu": 0},
+            )
+            return
+        if arch in ("powerpc", "powerpc:MPC8XX", "ppc64"):
+            mon.execute_command(
+                "avatar-ppc-inject-irq",
+                args={"num-irq": int(irq_num), "num-cpu": 0},
+            )
+            return
+        # arm / arm64 / others: fall through to the generic
+        # IrqController path on HalBackend (writes GICD_ISPENDR
+        # via write_memory; configurable_machine wires the GIC
+        # output to the CPU IRQ input).
         super().inject_irq(irq_num)
 
     # ------------------------------------------------------------------

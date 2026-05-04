@@ -227,40 +227,18 @@ class PowerPCQemuTarget(QemuTarget):
         raise NotImplementedError
 
     def inject_irq(self, irq_num: int) -> None:
-        """Generic PPC inject_irq for the legacy avatar2 path.
+        """Pulse the PowerPC CPU's IRQ input *irq_num* via
+        avatar-qemu's ``avatar-ppc-inject-irq`` QMP command.
 
-        Routes through the IrqController declared in
-        ``machine.interrupt_controller``: the OpenPicController
-        writes IPIDR for the source, and avatar-qemu's
-        configurable machine — when the YAML declares
-        ``qemu_name: openpic`` with the OpenPIC's per-CPU IRQ
-        output wired to the CPU's external-interrupt input —
-        propagates that to the running CPU.
+        *irq_num* indexes into ``env->irq_inputs[]``; for e500v2
+        the canonical external-IRQ slot is
+        ``PPCE500_INPUT_INT = 4``. The QMP path pulses the line
+        directly, which is equivalent to OpenPIC asserting it.
         """
-        from avatar2 import TargetStates
-        cfg = getattr(self.avatar, "config", None)
-        machine_cfg = getattr(cfg, "machine", None) if cfg else None
-        spec = getattr(machine_cfg, "interrupt_controller", None) \
-            if machine_cfg else None
-        if spec is None:
-            raise NotImplementedError(
-                "PowerPC inject_irq requires machine.interrupt_controller "
-                "to be declared (type: openpic, openpic_base: ...).")
-        from halucinator.backends.irq import build_irq_controller
-        ctrl = build_irq_controller(machine_cfg.arch, spec)
-        if ctrl is None:
-            raise NotImplementedError(
-                "PowerPC inject_irq: no IrqController available for "
-                f"arch {machine_cfg.arch!r}.")
-        was_running = (self.state == TargetStates.RUNNING)
-        if was_running:
-            self.stop()
-            self.wait()
-        try:
-            ctrl.trigger(self, int(irq_num))
-        finally:
-            if was_running:
-                self.cont()
+        self.protocols.monitor.execute_command(
+            "avatar-ppc-inject-irq",
+            args={"num-irq": int(irq_num), "num-cpu": 0},
+        )
 
     def irq_set_qmp(self, irq_num: int = 1) -> None:
         '''

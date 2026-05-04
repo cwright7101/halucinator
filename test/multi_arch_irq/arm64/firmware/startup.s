@@ -43,10 +43,61 @@ _reset:
     ldr  x0, =_stack_top
     mov  sp, x0
 
-    adr  x0, _vectors
-    msr  vbar_el1, x0
-    isb
+    adr  x1, _vectors
 
+    /* Configurable_machine boots cortex-a57 at the highest
+     * implemented EL — typically EL3 with security extensions, or
+     * EL2 otherwise. Set VBAR for the current EL so a real GIC
+     * line we wire to ARM_CPU_IRQ also gets vectored from EL3 /
+     * EL2, then drop to EL1 so the firmware's existing IRQ
+     * vector fires through the CurrentEL/SPx slot at +0x280. */
+    mrs  x0, CurrentEL
+    lsr  x0, x0, #2
+    cmp  x0, #3
+    beq  _at_el3
+    cmp  x0, #2
+    beq  _at_el2
+    /* EL1 */
+    msr  vbar_el1, x1
+    isb
+    b    _enter_main
+
+_at_el3:
+    msr  vbar_el3, x1
+    msr  vbar_el2, x1
+    msr  vbar_el1, x1
+    /* SCR_EL3: enable lower-EL aarch64, route IRQs to EL3 off
+     * (let EL1 take them). bits: NS=1, RW=1, IRQ=0, FIQ=0. */
+    mov  x0, #0x501
+    msr  scr_el3, x0
+    /* HCR_EL2: set RW=1 for AArch64 EL1. */
+    mov  x0, #(1 << 31)
+    msr  hcr_el2, x0
+    /* SPSR_EL3: return to EL1h with DAIF cleared. */
+    mov  x0, #0x3c5
+    msr  spsr_el3, x0
+    adr  x0, _at_el1
+    msr  elr_el3, x0
+    eret
+
+_at_el2:
+    msr  vbar_el2, x1
+    msr  vbar_el1, x1
+    /* HCR_EL2: RW=1 (AArch64 lower EL). */
+    mov  x0, #(1 << 31)
+    msr  hcr_el2, x0
+    /* SPSR_EL2: return to EL1h DAIF clear. */
+    mov  x0, #0x3c5
+    msr  spsr_el2, x0
+    adr  x0, _at_el1
+    msr  elr_el2, x0
+    eret
+
+_at_el1:
+    /* Re-establish SP at EL1 (eret may have switched banks). */
+    ldr  x0, =_stack_top
+    mov  sp, x0
+_enter_main:
     bl   main
 1:  b 1b
 

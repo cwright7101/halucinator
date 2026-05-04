@@ -341,7 +341,8 @@ class GhidraBackend(ARM32HalMixin, HalBackend):
         # registers while the emulator is running). Watchpoints also
         # require single-stepping. In both cases we run in step-mode
         # and poll the queue every N instructions.
-        irq_poll = (self.arch in ("cortex-m3", "arm"))
+        irq_poll = (self.arch in ("cortex-m3", "arm", "arm64", "mips",
+                                   "powerpc", "powerpc:MPC8XX", "ppc64"))
         if self._watchpoints or irq_poll:
             self._emulator.enableMemoryWriteTracking(bool(self._watchpoints))
             self._step_with_polling()
@@ -553,11 +554,39 @@ class GhidraBackend(ARM32HalMixin, HalBackend):
         register writes; those go through the standard PCode emulator
         memory state and the firmware sees them on the next cont().
         """
-        if self.arch not in ("cortex-m3", "arm"):
+        if self.arch not in ("cortex-m3", "arm", "arm64", "mips",
+                              "powerpc", "powerpc:MPC8XX", "ppc64"):
             super().inject_irq(irq_num)
             return
+        # On non-cortex-m archs, require an IrqController so the
+        # error message points at the YAML the user needs to
+        # declare. Check this before we touch _emulator so the
+        # error is independent of init() ordering.
+        if self.arch != "cortex-m3":
+            ctrl = getattr(self, "_irq_controller", None)
+            if ctrl is None:
+                from halucinator.backends.irq import IrqConfigError
+                raise IrqConfigError(
+                    f"GhidraBackend(arch={self.arch!r}) has no "
+                    "interrupt controller configured. Set "
+                    "machine.interrupt_controller in the YAML.")
         if self._emulator is None:
             raise RuntimeError("Call GhidraBackend.init() first")
+        # On non-cortex-m archs, also issue the IrqController MMIO
+        # write so firmware that polls the controller registers
+        # sees the bit set. The synthetic entry below transfers
+        # control either way.
+        if self.arch != "cortex-m3":
+            try:
+                ctrl.trigger(self, irq_num)
+            except Exception as exc:  # noqa: BLE001
+                # MIPS controller's RMW on CP0 'cause' may fail
+                # under Ghidra; the synthetic shadow-write below
+                # delivers anyway.
+                if self.arch == "mips" and "cause" in str(exc):
+                    pass
+                else:
+                    raise
         # Cross-thread safe: list.append is atomic in CPython.
         self._pending_irqs.append(int(irq_num))
         # setHalt asks the running emulator to break out of run().
@@ -575,6 +604,12 @@ class GhidraBackend(ARM32HalMixin, HalBackend):
             return
         if self.arch == "arm":
             self._apply_pending_irq_armv7a(irq_num)
+            return
+        if self.arch == "arm64":
+            self._apply_pending_irq_arm64(irq_num)
+            return
+        if self.arch in ("mips", "powerpc", "powerpc:MPC8XX", "ppc64"):
+            self._apply_pending_irq_shadow_write(irq_num)
             return
         vtor = getattr(self, "_vtor", 0)
         isr_slot = vtor + (16 + irq_num) * 4
@@ -608,6 +643,73 @@ class GhidraBackend(ARM32HalMixin, HalBackend):
             "GhidraBackend.inject_irq(%d): entering ISR @ 0x%x (vector 0x%x)",
             irq_num, isr_addr, isr_slot,
         )
+
+    def _apply_pending_irq_arm64(self, irq_num: int) -> None:
+        """Synthesise an AArch64 IRQ entry. Mirrors the unicorn
+        path: jump to ``irq_simple_entry`` (firmware-side AAPCS
+        trampoline) with x30 = interrupted PC. The IrqController
+        carries the trampoline address via ``irq_simple_entry``."""
+        if self._emulator is None:
+            return
+        ctrl = getattr(self, "_irq_controller", None)
+        irq_simple = (getattr(ctrl, "irq_simple_entry", None)
+                      if ctrl else None)
+        if irq_simple is None:
+            log.warning("GhidraBackend.inject_irq(%d): arm64 controller "
+                        "has no irq_simple_entry — IRQ won't deliver",
+                        irq_num)
+            return
+        gicc_base = getattr(ctrl, "gicc_base", None) if ctrl else None
+        if gicc_base is not None:
+            try:
+                self.write_memory(gicc_base + 0x0C, 1,
+                                  int(irq_num).to_bytes(4, "little"),
+                                  4, raw=True)
+            except Exception:  # noqa: BLE001
+                pass
+        return_pc = self.read_register("pc")
+        from java.math import BigInteger  # type: ignore
+        for name, val in (("x30", return_pc), ("pc", int(irq_simple))):
+            r = self._resolve_register(name)
+            if r is not None:
+                self._emulator.writeRegister(r, BigInteger.valueOf(int(val)))
+        log.info(
+            "GhidraBackend.inject_irq(%d): AArch64 trampoline @ 0x%x, "
+            "return=0x%x", irq_num, irq_simple, return_pc,
+        )
+
+    def _apply_pending_irq_shadow_write(self, irq_num: int) -> None:
+        """Deliver an IRQ via shadow-write — same pattern as the
+        unicorn MIPS / PPC paths. Bypass any synthetic exception
+        entry and just write the post-ack flag + number directly
+        into the firmware's globals; main's polling loop sees
+        them on its next iteration."""
+        ctrl = getattr(self, "_irq_controller", None)
+        if ctrl is None:
+            return
+        irq_number_addr = getattr(ctrl, "irq_number_addr", None)
+        irq_fired_addr = getattr(ctrl, "irq_fired_addr", None)
+        if irq_number_addr is None or irq_fired_addr is None:
+            log.warning(
+                "GhidraBackend.inject_irq(%d): %s controller has no "
+                "irq_fired_addr/irq_number_addr — IRQ won't deliver",
+                irq_num, self.arch)
+            return
+        try:
+            self.write_memory(int(irq_number_addr), 1,
+                              int(irq_num).to_bytes(4, "big"),
+                              4, raw=True)
+            self.write_memory(int(irq_fired_addr), 1,
+                              (1).to_bytes(4, "big"),
+                              4, raw=True)
+            log.info(
+                "GhidraBackend.inject_irq(%d): %s shadow write -> "
+                "irq_number@0x%x irq_fired@0x%x",
+                irq_num, self.arch, irq_number_addr, irq_fired_addr)
+        except Exception as exc:  # noqa: BLE001
+            log.warning(
+                "GhidraBackend.inject_irq(%d): %s shadow write failed: %r",
+                irq_num, self.arch, exc)
 
     def _maybe_handle_exc_return(self, pc: int) -> bool:
         """If PC now points at an EXC_RETURN magic value (as happens
