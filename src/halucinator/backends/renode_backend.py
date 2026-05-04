@@ -210,7 +210,10 @@ class RenodeBackend(ARM32HalMixin, HalBackend):
             stdin=subprocess.DEVNULL,
         )
 
-        retries = 20
+        # Renode startup time scales with platform complexity: a
+        # plain Cortex-M is ~5s, ARMv7A + GIC + GDB stub goes
+        # 15-20s on a slow CI runner. Retry generously.
+        retries = 120  # 60s @ 0.5s
         last_err: Optional[Exception] = None
         for i in range(retries):
             try:
@@ -331,7 +334,17 @@ class RenodeBackend(ARM32HalMixin, HalBackend):
             repl_lines.append("lowmem: Memory.MappedMemory @ sysbus 0x0")
             repl_lines.append("    size: 0x1000")
             repl_lines.append("")
+        # Memory regions whose qemu_name names a Renode-modelled
+        # peripheral (currently arm_gic, openpic) — skip the
+        # plain-RAM mapping so the per-arch IRQ controller in the
+        # _repl_cpu_block isn't shadowed by an overlapping memory
+        # range. Other backends (avatar2/qemu) honour qemu_name
+        # natively; unicorn/ghidra ignore qemu_name and treat the
+        # entry as plain memory.
+        _PERIPHERAL_QEMU_NAMES = ("arm_gic", "openpic")
         for region in self._regions:
+            if getattr(region, "qemu_name", None) in _PERIPHERAL_QEMU_NAMES:
+                continue
             repl_lines.append(
                 f"mem{region.base_addr:x}: Memory.MappedMemory @ sysbus "
                 f"{hex(region.base_addr)}"
