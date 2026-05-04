@@ -11,8 +11,7 @@ SECTIONS
     .text   : { *(.text*)   } > flash
     .rodata : { *(.rodata*) } > flash
 
-    . = 0x500;
-    .vectors : { KEEP(*(.vector_500)) } > flash
+    .vectors 0x500 : { KEEP(*(.vector_500)) } > flash
 
     .bss    : { *(.bss*) *(COMMON) } > ram
 
