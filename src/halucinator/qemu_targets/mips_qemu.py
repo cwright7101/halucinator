@@ -67,3 +67,18 @@ class MIPSQemuTarget(HALQemuTarget):
             # TODO: if longer than 1 word, need to split ret_value and put in v0 and v1
             self.regs.v0 = ret_value & 0xFFFFFFFF  # Truncate to 32 bits
         self.regs.pc = self.regs.ra
+
+    def inject_irq(self, irq_num: int) -> None:
+        """Pulse MIPS Cause.IP[*irq_num*] via avatar-qemu's
+        ``avatar-mips-inject-irq`` QMP command.
+
+        IRQ numbering matches the MIPS Cause.IP bit position
+        (0..7); HW IRQs are bits 2..7 (IP2..IP7). The QMP path
+        pulses the CPU's GPIO input line, which propagates through
+        the standard MIPS interrupt path without requiring a
+        custom interrupt controller in the configurable machine.
+        """
+        self.protocols.monitor.execute_command(
+            "avatar-mips-inject-irq",
+            args={"num-irq": int(irq_num), "num-cpu": 0},
+        )

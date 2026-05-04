@@ -265,10 +265,10 @@ class RenodeBackend(ARM32HalMixin, HalBackend):
                 "    nvic: nvic",
                 "",
             ]
-        elif cpu_class == "ARMv8A":
-            # ARMv8A requires a GIC attached to the CPU.
+        elif cpu_class in ("ARMv7A", "ARMv8A"):
+            # ARMv7A / ARMv8A require a GIC attached to the CPU.
             lines += [
-                "cpu: CPU.ARMv8A @ sysbus",
+                f"cpu: CPU.{cpu_class} @ sysbus",
                 f"    cpuType: \"{cpu_type}\"",
                 "    genericInterruptController: gic",
                 "",

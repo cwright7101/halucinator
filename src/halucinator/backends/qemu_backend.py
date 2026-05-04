@@ -855,16 +855,35 @@ class QEMUBackend(ARM32HalMixin, HalBackend):
     # ------------------------------------------------------------------
 
     def inject_irq(self, irq_num: int) -> None:
-        # Cortex-M3 fast-path: same avatar-qemu QMP command Avatar2Backend
-        # uses; integrates with its NVIC + watchman semantics. Other
-        # arches fall through to the IrqController on HalBackend.
-        if getattr(self, "arch", None) == "cortex-m3":
-            # avatar-armv7m-inject-irq takes a full Cortex-M exception
-            # number; the halucinator API takes external IRQ numbers,
-            # so add the 16-system-exception offset.
+        arch = getattr(self, "arch", None)
+        # Cortex-M3 fast-path: avatar-qemu's NVIC-aware QMP command
+        # integrates with watchman semantics. Add the 16-system-
+        # exception offset since the QMP command takes a full
+        # Cortex-M exception number.
+        if arch == "cortex-m3":
             self._qmp.execute(
                 "avatar-armv7m-inject-irq",
                 {"num-irq": int(irq_num) + 16, "num-cpu": 0},
+            )
+            return
+        # MIPS fast-path: avatar-qemu pulses the CPU's int_pin via
+        # avatar-mips-inject-irq, which goes straight to the
+        # standard MIPS interrupt path. No IrqController MMIO
+        # write needed.
+        if arch == "mips":
+            self._qmp.execute(
+                "avatar-mips-inject-irq",
+                {"num-irq": int(irq_num), "num-cpu": 0},
+            )
+            return
+        # PPC fast-path: avatar-qemu pulses env->irq_inputs[N] via
+        # avatar-ppc-inject-irq. *irq_num* indexes into the CPU's
+        # IRQ input array (e500v2: PPCE500_INPUT_INT=4 for the
+        # external IRQ).
+        if arch in ("powerpc", "powerpc:MPC8XX", "ppc64"):
+            self._qmp.execute(
+                "avatar-ppc-inject-irq",
+                {"num-irq": int(irq_num), "num-cpu": 0},
             )
             return
         # Other arches use the IrqController via super().inject_irq

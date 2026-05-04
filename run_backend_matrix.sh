@@ -35,12 +35,12 @@ FIRMWARES=(
   "multi_arch_mips|/root/halucinator|UART.*TX|25"
   "multi_arch_ppc|/root/halucinator|UART.*TX|25"
   "multi_arch_ppc64|/root/halucinator|UART.*TX|35"
-  "cortex_m_irq|/root/halucinator|IRQ 17 FIRED|45"
-  "arm32_irq|/root/halucinator|IRQ 33 FIRED|45"
-  "arm64_irq|/root/halucinator|IRQ 33 FIRED|45"
-  "mips_irq|/root/halucinator|MIPS IRQ test PASSED|45"
-  "ppc_irq|/root/halucinator|PPC IRQ test PASSED|45"
-  "ppc64_irq|/root/halucinator|PPC64 IRQ test PASSED|45"
+  "cortex_m_irq|/root/halucinator|IRQ 17 FIRED|60"
+  "arm32_irq|/root/halucinator|IRQ 33 FIRED|180"
+  "arm64_irq|/root/halucinator|IRQ 33 FIRED|180"
+  "mips_irq|/root/halucinator|MIPS IRQ test PASSED|180"
+  "ppc_irq|/root/halucinator|PPC IRQ test PASSED|180"
+  "ppc64_irq|/root/halucinator|PPC64 IRQ test PASSED|180"
 )
 
 # firmware/backend pairs the local image can't run end-to-end. Reported
@@ -98,8 +98,6 @@ SKIP_PAIRS=(
   "multi_arch_ppc64/unicorn"
   "arm32_irq/ghidra"
   "arm32_irq/renode"
-  "arm64_irq/avatar2"
-  "arm64_irq/qemu"
   "arm64_irq/ghidra"
   "arm64_irq/renode"
   "mips_irq/avatar2"
@@ -175,11 +173,27 @@ for FW_SPEC in "${FIRMWARES[@]}"; do
       continue
     fi
     echo ">>> $KEY"
+    # If the user has pre-built avatar-qemu locally (the
+    # configurable_machine multi-region MMIO support landed there
+    # in 2026-05; the in-image qemu may pre-date it), prefer the
+    # local binaries. Maps the build dirs into the container and
+    # exports the per-arch env-vars halucinator looks at.
+    QEMU_MOUNTS=()
+    QEMU_ENV=""
+    if [ -x "$SRC/.build-arm/qemu-system-arm" ]; then
+      QEMU_MOUNTS+=(-v "$SRC/.build-arm:/root/halucinator/deps/build-qemu-arm")
+      QEMU_ENV+=" -e HALUCINATOR_QEMU_ARM=/root/halucinator/deps/build-qemu-arm/qemu-system-arm"
+    fi
+    if [ -x "$SRC/.build-aarch64/qemu-system-aarch64" ]; then
+      QEMU_MOUNTS+=(-v "$SRC/.build-aarch64:/root/halucinator/deps/build-qemu-aarch64")
+      QEMU_ENV+=" -e HALUCINATOR_QEMU_ARM64=/root/halucinator/deps/build-qemu-aarch64/qemu-system-aarch64"
+    fi
     "$DOCKER" run --rm \
       -v "$SRC/src:/root/halucinator/src" \
       -v "$SRC/test:/root/halucinator/test" \
       -v "$LOG_MOUNT:/root/halucinator/.matrix_logs" \
       -v "$SHIM:/usr/local/bin/_halucinator_shim.sh:ro" \
+      "${QEMU_MOUNTS[@]}" $QEMU_ENV \
       -w "$DIR" "$IMAGE" bash -c "
         set +e
         if [ ! -f /usr/local/bin/_halucinator_real ]; then

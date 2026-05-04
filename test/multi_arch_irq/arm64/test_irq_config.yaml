@@ -12,7 +12,7 @@ machine:
     # AArch64-only: trampoline address that backends without a CPU
     # exception model (unicorn/ghidra) jump to on synthetic IRQ
     # delivery. Must follow AAPCS — receives LR=interrupted PC.
-    irq_simple_entry: 0x0000080c
+    irq_simple_entry: 0x00000884
 
 intercepts:
 - class: halucinator.bp_handlers.generic.test_uart.TestUART

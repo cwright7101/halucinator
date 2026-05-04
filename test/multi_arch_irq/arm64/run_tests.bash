@@ -19,7 +19,7 @@ PYTHONUNBUFFERED=1 \
     > hal_out.txt 2>&1 &
 HAL_PID=$!
 
-TIMEOUT=60
+TIMEOUT=120
 ELAPSED=0
 while [ $ELAPSED -lt $TIMEOUT ]; do
     if grep -q "UART TX:b'READY" hal_out.txt 2>/dev/null; then
