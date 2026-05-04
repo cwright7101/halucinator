@@ -212,8 +212,10 @@ class RenodeBackend(ARM32HalMixin, HalBackend):
 
         # Renode startup time scales with platform complexity: a
         # plain Cortex-M is ~5s, ARMv7A + GIC + GDB stub goes
-        # 15-20s on a slow CI runner. Retry generously.
-        retries = 120  # 60s @ 0.5s
+        # 15-20s on a slow CI runner, and matrix-harness Docker
+        # contention can stretch it past a minute. Retry well
+        # beyond 60s so the matrix doesn't fail spuriously.
+        retries = 240  # 120s @ 0.5s
         last_err: Optional[Exception] = None
         for i in range(retries):
             try:

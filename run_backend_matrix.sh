@@ -32,7 +32,7 @@ FIRMWARES=(
   "p2im_drone|/root/halucinator|HAL_LOG|25"
   "multi_arch_arm32|/root/halucinator|UART.*TX|25"
   "multi_arch_arm64|/root/halucinator|UART.*TX|25"
-  "multi_arch_mips|/root/halucinator|UART.*TX|25"
+  "multi_arch_mips|/root/halucinator|UART.*TX|60"
   "multi_arch_ppc|/root/halucinator|UART.*TX|25"
   "multi_arch_ppc64|/root/halucinator|UART.*TX|35"
   "cortex_m_irq|/root/halucinator|IRQ 17 FIRED|60"
