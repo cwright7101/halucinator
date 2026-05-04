@@ -239,14 +239,11 @@ class RenodeBackend(ARM32HalMixin, HalBackend):
     # Renode CPU class name + the cpuType string it expects per halucinator
     # arch. The CPU class goes into `CPU.<Class>` in the .repl/.resc; the
     # cpuType is the concrete sub-variant.
-    # NOTE: MIPS is intentionally absent — the linux-arm64-dotnet-portable
-    # Renode release doesn't ship a MIPS CPU class (CPU.MIPS, MIPSCpu,
-    # MIPS4Kc, etc. all fail to resolve at LoadPlatformDescription time).
-    # Use --emulator avatar2 / qemu / unicorn for mips firmware.
     _CPU_TYPE: Dict[str, Tuple[str, str]] = {
         "cortex-m3":      ("CortexM",   "cortex-m3"),
         "arm":            ("ARMv7A",    "cortex-a7"),
         "arm64":          ("ARMv8A",    "cortex-a53"),
+        "mips":           ("MIPS",      "MIPS4Kc"),
         "powerpc":        ("PowerPc",   "e200z6"),
         "powerpc:MPC8XX": ("PowerPc",   "e200z6"),
         "ppc64":          ("PowerPc64", "power8"),
