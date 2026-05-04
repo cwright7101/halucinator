@@ -226,18 +226,28 @@ class PowerPCQemuTarget(QemuTarget):
     def get_irq_base_addr(self) -> int:
         raise NotImplementedError
 
+    # PPCE500_INPUT_INT = 4. The user-facing IRQ number from
+    # hal_dev_irq_trigger doesn't map 1:1 to env->irq_inputs[]
+    # indices on PowerPC — there are only ~5 input lines and
+    # they're named (RESET_CORE, MCK, CINT, INT, DEBUG, ...).
+    # Always pulse INPUT_INT for external IRQs so the firmware
+    # vector at 0x500 fires consistently.
+    _PPCE500_INPUT_INT = 4
+
     def inject_irq(self, irq_num: int) -> None:
-        """Pulse the PowerPC CPU's IRQ input *irq_num* via
+        """Pulse the e500v2 CPU's external interrupt input via
         avatar-qemu's ``avatar-ppc-inject-irq`` QMP command.
 
-        *irq_num* indexes into ``env->irq_inputs[]``; for e500v2
-        the canonical external-IRQ slot is
-        ``PPCE500_INPUT_INT = 4``. The QMP path pulses the line
-        directly, which is equivalent to OpenPIC asserting it.
+        Unlike ARM/MIPS, PowerPC's env->irq_inputs[] is sparse
+        (only ~5 entries, addressing different exception sources
+        like reset, machine-check, INT, etc.). Halucinator's
+        single-IRQ model maps to PPCE500_INPUT_INT = 4 — the
+        canonical external interrupt — regardless of *irq_num*.
         """
+        del irq_num  # not used; PPC always pulses INPUT_INT
         self.protocols.monitor.execute_command(
             "avatar-ppc-inject-irq",
-            args={"num-irq": int(irq_num), "num-cpu": 0},
+            args={"num-irq": self._PPCE500_INPUT_INT, "num-cpu": 0},
         )
 
     def irq_set_qmp(self, irq_num: int = 1) -> None:

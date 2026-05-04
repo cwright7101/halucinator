@@ -886,13 +886,20 @@ class QEMUBackend(ARM32HalMixin, HalBackend):
             )
             return
         # PPC fast-path: avatar-qemu pulses env->irq_inputs[N] via
-        # avatar-ppc-inject-irq. *irq_num* indexes into the CPU's
-        # IRQ input array (e500v2: PPCE500_INPUT_INT=4 for the
-        # external IRQ).
-        if arch in ("powerpc", "powerpc:MPC8XX", "ppc64"):
+        # avatar-ppc-inject-irq. PowerPC's irq_inputs[] is sparse
+        # (5-7 entries, name-indexed); halucinator's single-IRQ
+        # API always pulses the canonical external INT slot:
+        # 4 for e500v2 (PPCE500_INPUT_INT), 0 for Book3S PPC64.
+        if arch in ("powerpc", "powerpc:MPC8XX"):
             self._qmp.execute(
                 "avatar-ppc-inject-irq",
-                {"num-irq": int(irq_num), "num-cpu": 0},
+                {"num-irq": 4, "num-cpu": 0},
+            )
+            return
+        if arch == "ppc64":
+            self._qmp.execute(
+                "avatar-ppc-inject-irq",
+                {"num-irq": 0, "num-cpu": 0},
             )
             return
         # Other arches use the IrqController via super().inject_irq
