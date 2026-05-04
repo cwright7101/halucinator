@@ -105,7 +105,7 @@ _ARCH_MAP: Dict[str, Dict[str, str]] = {
     "cortex-m3":      {"cpu_type": "CortexM",    "arch_key": "arm"},
     "arm":            {"cpu_type": "ARMv7A",     "arch_key": "arm"},
     "arm64":          {"cpu_type": "ARMv8A",     "arch_key": "arm64"},
-    # mips omitted — CPU.MIPS* doesn't resolve on linux-arm64-dotnet-portable
+    "mips":           {"cpu_type": "MIPS",       "arch_key": "mips"},
     "powerpc":        {"cpu_type": "PowerPc",    "arch_key": "powerpc"},
     "powerpc:MPC8XX": {"cpu_type": "PowerPc",    "arch_key": "powerpc"},
     "ppc64":          {"cpu_type": "PowerPc64",  "arch_key": "ppc64"},

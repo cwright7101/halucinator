@@ -10,6 +10,10 @@ SECTIONS
 {
     .text   : { *(.text*)   } > flash
     .rodata : { *(.rodata*) } > flash
+
+    . = 0x500;
+    .vectors : { KEEP(*(.vector_500)) } > flash
+
     .bss    : { *(.bss*) *(COMMON) } > ram
 
     /DISCARD/ : { *(.note.gnu.build-id) *(.opd) }

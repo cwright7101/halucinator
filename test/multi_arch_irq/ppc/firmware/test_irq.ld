@@ -11,6 +11,12 @@ SECTIONS
     .text   : { *(.text*)   } > flash
     .rodata : { *(.rodata*) } > flash
 
+    /* PowerPC exception vectors: External Interrupt at fixed
+     * offset 0x500. Place the .vector_500 section there so QEMU
+     * vectors here on env->irq_inputs[INT] assert. */
+    . = 0x500;
+    .vectors : { KEEP(*(.vector_500)) } > flash
+
     .bss : { *(.bss*) *(COMMON) } > ram
 
     /DISCARD/ : { *(.note.gnu.build-id) }

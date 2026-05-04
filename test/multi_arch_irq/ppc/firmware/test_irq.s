@@ -22,6 +22,21 @@
  *   0x40000004 irq_fired   (uint32_t)
  */
 
+    /* External Interrupt vector lives at flash 0x500 per PPC
+     * exception model. Real avatar2/qemu IRQ delivery vectors
+     * here when MSR.EE=1 and env->irq_inputs[INT] asserts. */
+    .section .vector_500, "ax"
+    .global _ext_irq_vector
+_ext_irq_vector:
+    /* Set irq_fired=1, irq_number=7 (we don't have a hardware way
+     * to tell which IRQ — synthesize via fixed value). */
+    lis     0, 0x4000
+    li      11, 7
+    stw     11, 0(0)         /* irq_number = 7 */
+    li      11, 1
+    stw     11, 4(0)         /* irq_fired = 1 */
+    rfi
+
     .section .text
     .global _start
     .global IRQ_HOOK_ADDR
