@@ -120,13 +120,18 @@ def _instantiate(spec: IrqControllerSpec) -> IrqController:
                 f"`gicd_base` (the GIC distributor base address). "
                 f"On QEMU's `virt` machine that's 0x08000000."
             )
-        gicc_base = (spec.options or {}).pop("gicc_base", None)
-        irq_simple_entry = (spec.options or {}).pop("irq_simple_entry", None)
+        opts = spec.options or {}
+        gicc_base = opts.pop("gicc_base", None)
+        irq_simple_entry = opts.pop("irq_simple_entry", None)
+        irq_fired_addr = opts.pop("irq_fired_addr", None)
+        irq_number_addr = opts.pop("irq_number_addr", None)
         return GicController(gicd_base=spec.gicd_base,
                              version=2 if spec.type == "gicv2" else 3,
                              gicc_base=gicc_base,
                              irq_simple_entry=irq_simple_entry,
-                             options=spec.options)
+                             irq_fired_addr=irq_fired_addr,
+                             irq_number_addr=irq_number_addr,
+                             options=opts)
     if spec.type == "mips":
         from .mips import MipsController
         opts = spec.options or {}

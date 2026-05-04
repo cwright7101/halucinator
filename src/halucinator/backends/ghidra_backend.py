@@ -602,6 +602,17 @@ class GhidraBackend(ARM32HalMixin, HalBackend):
         emulator to be paused."""
         if self._emulator is None:
             return
+        # If the IrqController carries shadow-write addresses,
+        # prefer them over the per-arch synthetic exception entry
+        # — the shadow path bypasses Ghidra's banked-register
+        # quirks (which keep arm/arm64 unreliable). The firmware
+        # globals live at known offsets in our test corpus.
+        ctrl = getattr(self, "_irq_controller", None)
+        if (ctrl is not None
+            and getattr(ctrl, "irq_fired_addr", None) is not None
+            and getattr(ctrl, "irq_number_addr", None) is not None):
+            self._apply_pending_irq_shadow_write(irq_num)
+            return
         if self.arch == "arm":
             self._apply_pending_irq_armv7a(irq_num)
             return
