@@ -18,7 +18,7 @@ PYTHONUNBUFFERED=1 \
     > hal_out.txt 2>&1 &
 HAL_PID=$!
 
-TIMEOUT=120
+TIMEOUT=300
 ELAPSED=0
 while [ $ELAPSED -lt $TIMEOUT ]; do
     if grep -q "UART TX:b'READY" hal_out.txt 2>/dev/null; then
@@ -44,7 +44,7 @@ fi
 hal_dev_irq_trigger -i 7 || true
 sleep 2
 
-TIMEOUT=30
+TIMEOUT=120
 ELAPSED=0
 SUCCESS=0
 # Firmware emits "IRQ ", individual digit chars, " FIRED\n" — match

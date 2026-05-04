@@ -1097,6 +1097,7 @@ def _emulate_with_renode_backend(
             size=size,
             permissions=memory.permissions or "rwx",
             file=memory.file,
+            qemu_name=memory.qemu_name,
         )
         log.info("Adding Memory: %s Addr: 0x%08x Size: 0x%08x",
                  memory.name, memory.base_addr, size)
