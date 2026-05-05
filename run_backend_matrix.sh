@@ -115,12 +115,9 @@ SKIP_PAIRS=(
   "mips_irq/renode"
   "ppc_irq/renode"
   "ppc64_irq/renode"
-  # ppc64_irq/{avatar2,qemu}: 970 IRQ delivery via env->irq_inputs[]
-  # + qemu_irq_pulse races against MTTCG's BQL — the assert+deassert
-  # both happen with BQL held, so the CPU thread sees no edge.
-  # Documented avatar-qemu/970 limitation; needs a deferred-deassert
-  # pattern to fix.
-  "ppc64_irq/avatar2"
+  # ppc64_irq/qemu: avatar-qemu's ppc64 gdbstub asserts in
+  # handle_read_all_regs (same upstream issue as multi_arch_ppc64/qemu).
+  # The avatar2 path goes through a different gdb plumbing and works.
   "ppc64_irq/qemu"
 )
 

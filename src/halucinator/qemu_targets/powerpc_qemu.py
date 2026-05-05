@@ -235,16 +235,33 @@ class PowerPCQemuTarget(QemuTarget):
     _PPCE500_INPUT_INT = 4
 
     def inject_irq(self, irq_num: int) -> None:
-        """Pulse the e500v2 CPU's external interrupt input via
-        avatar-qemu's ``avatar-ppc-inject-irq`` QMP command.
+        """Deliver IRQ *irq_num* via shadow-write into the firmware's
+        irq_fired / irq_number globals.
 
-        Unlike ARM/MIPS, PowerPC's env->irq_inputs[] is sparse
-        (only ~5 entries, addressing different exception sources
-        like reset, machine-check, INT, etc.). Halucinator's
-        single-IRQ model maps to PPCE500_INPUT_INT = 4 — the
-        canonical external interrupt — regardless of *irq_num*.
+        avatar-qemu's configurable_machine doesn't instantiate an
+        OpenPIC peripheral the CPU listens on, and qemu_irq_pulse on
+        env->irq_inputs[] races against MTTCG (the assert+deassert
+        both land while BQL is held by the QMP thread, so the vCPU
+        never sees the level-high edge). Stop the CPU, write the
+        post-ack state directly into RAM, then resume — the firmware's
+        polling loop sees the flag flip on its next iteration. This
+        is the same pattern UnicornBackend uses for ppc via
+        _apply_pending_irq_ppc.
+
+        Falls back to the raw QMP avatar-ppc-inject-irq pulse when no
+        shadow-state addresses are configured (preserves the legacy
+        path for configs that don't declare an interrupt_controller
+        block).
         """
-        del irq_num  # not used; PPC always pulses INPUT_INT
+        ctrl = getattr(self, "_irq_controller", None)
+        irq_fired_addr = getattr(ctrl, "irq_fired_addr", None)
+        irq_number_addr = getattr(ctrl, "irq_number_addr", None)
+        if irq_fired_addr is not None and irq_number_addr is not None:
+            self.stop()
+            self.write_memory(int(irq_number_addr), 4, int(irq_num))
+            self.write_memory(int(irq_fired_addr), 4, 1)
+            self.cont()
+            return
         self.protocols.monitor.execute_command(
             "avatar-ppc-inject-irq",
             args={"num-irq": self._PPCE500_INPUT_INT, "num-cpu": 0},
