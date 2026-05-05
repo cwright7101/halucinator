@@ -54,6 +54,16 @@ _start:
     stw     4, 0(3)
     stw     4, 4(3)
 
+    /* Book-E (e500) exception vectors: PC = (IVPR & 0xFFFFF000) |
+     * (IVORn & 0x0000FFF0). For our External Interrupt vector at
+     * flash 0x500: IVPR=0, IVOR4=0x500. SPR 63 = IVPR;
+     * SPR 404 = IVOR4 on e500. Without these the CPU jumps to an
+     * uninitialised vector when env->irq_inputs[INPUT_INT] asserts. */
+    li      4, 0
+    mtspr   63, 4
+    li      4, 0x500
+    mtspr   404, 4
+
     /* uart_init(0x50000000). */
     lis     3, 0x5000
     bl      uart_init
