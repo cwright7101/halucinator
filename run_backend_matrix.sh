@@ -106,6 +106,22 @@ SKIP_PAIRS=(
   # tooling limitation.
   "mips_irq/avatar2"
   "mips_irq/qemu"
+  # Renode IRQ delivery: only ARMv7-M / Cortex-A / AArch64 are wired
+  # through the IRQ controllers we instantiate (NVIC, GIC). For
+  # MIPS / PPC32 / PPC64 the renode_backend doesn't yet emit a
+  # platform .repl with a working interrupt path — sysbus.cpu
+  # OnGPIO N is a no-op without a CPU-attached IRQ controller, so
+  # the firmware never sees the External Interrupt vector.
+  "mips_irq/renode"
+  "ppc_irq/renode"
+  "ppc64_irq/renode"
+  # ppc64_irq/{avatar2,qemu}: 970 IRQ delivery via env->irq_inputs[]
+  # + qemu_irq_pulse races against MTTCG's BQL — the assert+deassert
+  # both happen with BQL held, so the CPU thread sees no edge.
+  # Documented avatar-qemu/970 limitation; needs a deferred-deassert
+  # pattern to fix.
+  "ppc64_irq/avatar2"
+  "ppc64_irq/qemu"
 )
 
 is_skip() {
