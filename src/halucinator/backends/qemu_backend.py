@@ -890,16 +890,41 @@ class QEMUBackend(ARM32HalMixin, HalBackend):
         # (5-7 entries, name-indexed); halucinator's single-IRQ
         # API always pulses the canonical external INT slot:
         # 4 for e500v2 (PPCE500_INPUT_INT), 0 for Book3S PPC64.
-        if arch in ("powerpc", "powerpc:MPC8XX"):
+        if arch in ("powerpc", "powerpc:MPC8XX", "ppc64"):
+            # Shadow-write delivery: avatar-qemu's configurable_machine
+            # doesn't instantiate an OpenPIC peripheral the CPU listens
+            # on, and qemu_irq_pulse on env->irq_inputs[] races against
+            # MTTCG (assert+deassert under BQL means the vCPU never
+            # observes the level-high edge). Stop the CPU, write the
+            # post-ack state directly into RAM, then resume — same
+            # pattern as the avatar2 path and UnicornBackend's
+            # _apply_pending_irq_ppc.
+            ctrl = getattr(self, "_irq_controller", None)
+            irq_fired_addr = getattr(ctrl, "irq_fired_addr", None)
+            irq_number_addr = getattr(ctrl, "irq_number_addr", None)
+            if irq_fired_addr is not None and irq_number_addr is not None:
+                stopped = False
+                try:
+                    self._gdb.stop()
+                    self._gdb.wait_for_stop(timeout=2.0)
+                    stopped = True
+                except Exception:  # noqa: BLE001
+                    pass
+                try:
+                    self.write_memory(int(irq_number_addr), 4, int(irq_num))
+                    self.write_memory(int(irq_fired_addr), 4, 1)
+                finally:
+                    if stopped:
+                        try:
+                            self._gdb.cont()
+                        except Exception:  # noqa: BLE001
+                            pass
+                return
+            # No shadow-state — fall back to QMP pulse (works only
+            # on e500 where the racy pulse happens to land).
             self._qmp.execute(
                 "avatar-ppc-inject-irq",
-                {"num-irq": 4, "num-cpu": 0},
-            )
-            return
-        if arch == "ppc64":
-            self._qmp.execute(
-                "avatar-ppc-inject-irq",
-                {"num-irq": 5, "num-cpu": 0},
+                {"num-irq": 4 if arch != "ppc64" else 5, "num-cpu": 0},
             )
             return
         # Other arches use the IrqController via super().inject_irq

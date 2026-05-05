@@ -341,6 +341,15 @@ def emulate_binary(
         # firmware's _start prologue assumes a valid stack.
         qemu.regs.sp = config.machine.init_sp
 
+    # Attach the IrqController to the QemuTarget so per-arch
+    # inject_irq overrides (powerpc_qemu, mips_qemu, ...) can read
+    # shadow-state addresses (irq_fired_addr / irq_number_addr) when
+    # they fall back to the shadow-write delivery path.
+    try:
+        qemu._irq_controller = config.machine.build_irq_controller()
+    except Exception:  # noqa: BLE001
+        qemu._irq_controller = None
+
     _start_execution(avatar, qemu, rx_port, tx_port, gdb_server_port)
 
 

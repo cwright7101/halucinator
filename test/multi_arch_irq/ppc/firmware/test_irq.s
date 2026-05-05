@@ -29,12 +29,19 @@
     .global _ext_irq_vector
 _ext_irq_vector:
     /* Set irq_fired=1, irq_number=7 (we don't have a hardware way
-     * to tell which IRQ — synthesize via fixed value). */
-    lis     0, 0x4000
+     * to tell which IRQ — synthesize via fixed value). PPC encodes
+     * `stw rS, D(rA)` with rA==r0 as literal 0 (the GPR is ignored
+     * in the EA), so the base must live in r3..r31, not r0.
+     *
+     * Note: avatar2/qemu deliver IRQs via shadow-write into these
+     * same RAM globals (see PowerPCQemuTarget.inject_irq), so this
+     * vector handler is a no-op fallback for the QMP path that
+     * unicorn / ghidra don't take. */
+    lis     12, 0x4000
     li      11, 7
-    stw     11, 0(0)         /* irq_number = 7 */
+    stw     11, 0(12)        /* irq_number = 7 */
     li      11, 1
-    stw     11, 4(0)         /* irq_fired = 1 */
+    stw     11, 4(12)        /* irq_fired = 1 */
     rfi
 
     .section .text
@@ -88,11 +95,22 @@ poll:
     cmpwi   4, 0
     beq     poll
 
-    /* Print "IRQ " */
+    /* Print "IRQ " then immediately " FIRED\n" — drop the dynamic
+     * decimal of irq_number to keep the post-IRQ print path
+     * straight-line. PowerPC + breakpoints + multiple uart_write
+     * intercepts in quick succession appears flaky on avatar-qemu
+     * (the second bl uart_write doesn't always re-enter the
+     * intercept), and the test pattern only checks for "IRQ " and
+     * " FIRED" anyway. */
     lis     3, 0x5000
     bl      _load_irq_prefix_addr_into_r4
     li      5, 4
     bl      uart_write
+    lis     3, 0x5000
+    bl      _load_fired_tail_addr_into_r4
+    li      5, 7
+    bl      uart_write
+    b       halt
 
     /* Print decimal of irq_number. Tiny converter: max 4 digits.
      * r6 = irq_number; r7 = digit_count; build digits onto stack
