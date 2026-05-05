@@ -96,16 +96,6 @@ SKIP_PAIRS=(
   "multi_arch_ppc64/qemu"
   "multi_arch_ppc64/unicorn"
   "ppc64_irq/unicorn"
-  # mips_irq firmware lives in kseg0/kseg1 (0x80000000/0xA0000000)
-  # which the in-process backends (unicorn, ghidra) and Renode treat
-  # as direct physical addresses. QEMU+avatar2 honour MIPS hardware
-  # virtual->physical translation: kseg0 0x80000000+x maps to phys x,
-  # so a .bin loaded at phys 0x80000000 is unreachable from CPU code
-  # fetches. Re-linking to kuseg breaks Ghidra's PCode emulator
-  # (jal target high-bits drop). Documented as upstream MIPS
-  # tooling limitation.
-  "mips_irq/avatar2"
-  "mips_irq/qemu"
   # Renode IRQ delivery: only ARMv7-M / Cortex-A / AArch64 are wired
   # through the IRQ controllers we instantiate (NVIC, GIC). For
   # MIPS / PPC32 / PPC64 the renode_backend doesn't yet emit a
@@ -115,10 +105,6 @@ SKIP_PAIRS=(
   "mips_irq/renode"
   "ppc_irq/renode"
   "ppc64_irq/renode"
-  # ppc64_irq/qemu: avatar-qemu's ppc64 gdbstub asserts in
-  # handle_read_all_regs (same upstream issue as multi_arch_ppc64/qemu).
-  # The avatar2 path goes through a different gdb plumbing and works.
-  "ppc64_irq/qemu"
 )
 
 is_skip() {

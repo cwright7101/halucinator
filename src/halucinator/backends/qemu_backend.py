@@ -391,27 +391,15 @@ class _GDBClient:
         key = name.lower()
         if self._reg_layout and key in self._reg_layout:
             off, size = self._reg_layout[key]
-            # avatar-qemu's ppc64 gdbstub asserts in handle_read_all_regs
-            # ("len == gdbserver_state.mem_buf->len") whenever the 'g'
-            # packet is sent — the assertion crashes the QEMU process
-            # before we can read any register. Fall straight through to
-            # the single-register 'p' protocol for ppc64.
-            if self.arch == "ppc64":
-                hex_resp = self._cmd(f"p{self._regnum_of(key):x}".encode())
+            data = self._read_g_packet()[off:off + size]
+            if len(data) < size:
+                # Fall back to 'p' single-register read for archs that
+                # only send a prefix of the g packet by default (PPC
+                # large vector regs etc).
+                hex_resp = self._cmd(
+                    f"p{self._regnum_of(key):x}".encode())
                 if hex_resp and not hex_resp.startswith(b"E"):
-                    data = bytes.fromhex(hex_resp.decode())[:size]
-                else:
-                    data = b"\x00" * size
-            else:
-                data = self._read_g_packet()[off:off + size]
-                if len(data) < size:
-                    # Fall back to 'p' single-register read for archs that
-                    # only send a prefix of the g packet by default (PPC
-                    # large vector regs etc).
-                    hex_resp = self._cmd(
-                        f"p{self._regnum_of(key):x}".encode())
-                    if hex_resp and not hex_resp.startswith(b"E"):
-                        data = bytes.fromhex(hex_resp.decode())
+                    data = bytes.fromhex(hex_resp.decode())
             order = "big" if self._big_endian_arch() else "little"
             return int.from_bytes(data, order)
         if self._reg_layout:
@@ -459,14 +447,8 @@ class _GDBClient:
         if resp and not resp.startswith(b"E") and resp != b"":
             log.warning("write_register %s: unexpected response %r", name, resp)
             return
-        # Empty reply -> 'P' unsupported. ppc64's avatar-qemu stub
-        # can't service 'g' (and therefore 'G') without crashing; skip
-        # the read-modify-write fallback for it and accept that the
-        # register write didn't take.
-        if self.arch == "ppc64":
-            log.debug("write_register %s: 'P' unsupported on ppc64, skipping",
-                      name)
-            return
+        # Empty reply -> 'P' unsupported; fall back to 'G'
+        # read-modify-write.
         all_bytes = bytearray(self._read_g_packet())
         if off + size > len(all_bytes):
             # Some stubs send a truncated g packet. Pad with zeros.
@@ -875,11 +857,21 @@ class QEMUBackend(ARM32HalMixin, HalBackend):
                 {"num-irq": int(irq_num), "num-cpu": 0},
             )
             return
-        # MIPS fast-path: avatar-qemu pulses the CPU's int_pin via
-        # avatar-mips-inject-irq, which goes straight to the
-        # standard MIPS interrupt path. No IrqController MMIO
-        # write needed.
+        # MIPS: prefer avatar-shadow-irq when the YAML provides
+        # physical shadow-state addresses; falls back to
+        # avatar-mips-inject-irq (Cause.IP pulse) otherwise.
         if arch == "mips":
+            ctrl = getattr(self, "_irq_controller", None)
+            irq_fired_phys = getattr(ctrl, "irq_fired_phys_addr", None)
+            irq_number_phys = getattr(ctrl, "irq_number_phys_addr", None)
+            if irq_fired_phys is not None and irq_number_phys is not None:
+                self._qmp.execute(
+                    "avatar-shadow-irq",
+                    {"number-addr": int(irq_number_phys),
+                     "fired-addr":  int(irq_fired_phys),
+                     "irq-num":     int(irq_num)},
+                )
+                return
             self._qmp.execute(
                 "avatar-mips-inject-irq",
                 {"num-irq": int(irq_num), "num-cpu": 0},
@@ -891,34 +883,26 @@ class QEMUBackend(ARM32HalMixin, HalBackend):
         # API always pulses the canonical external INT slot:
         # 4 for e500v2 (PPCE500_INPUT_INT), 0 for Book3S PPC64.
         if arch in ("powerpc", "powerpc:MPC8XX", "ppc64"):
-            # Shadow-write delivery: avatar-qemu's configurable_machine
-            # doesn't instantiate an OpenPIC peripheral the CPU listens
-            # on, and qemu_irq_pulse on env->irq_inputs[] races against
-            # MTTCG (assert+deassert under BQL means the vCPU never
-            # observes the level-high edge). Stop the CPU, write the
-            # post-ack state directly into RAM, then resume — same
-            # pattern as the avatar2 path and UnicornBackend's
-            # _apply_pending_irq_ppc.
+            # Shadow-write delivery via avatar-qemu's QMP avatar-shadow-irq
+            # command: writes irq_number / irq_fired straight into the
+            # firmware's RAM globals from the iothread, under BQL,
+            # without going through the GDB stub. Sidesteps two
+            # problems with the M-packet path: (a) QEMU's GDB stub
+            # rejects writes while the CPU is running, and (b) the
+            # halucinator dispatch loop's wait_for_stop on the same
+            # GDB socket would race against the inject thread's stop
+            # reply. The firmware's polling loop sees the flag flip on
+            # its next iteration.
             ctrl = getattr(self, "_irq_controller", None)
             irq_fired_addr = getattr(ctrl, "irq_fired_addr", None)
             irq_number_addr = getattr(ctrl, "irq_number_addr", None)
             if irq_fired_addr is not None and irq_number_addr is not None:
-                stopped = False
-                try:
-                    self._gdb.stop()
-                    self._gdb.wait_for_stop(timeout=2.0)
-                    stopped = True
-                except Exception:  # noqa: BLE001
-                    pass
-                try:
-                    self.write_memory(int(irq_number_addr), 4, int(irq_num))
-                    self.write_memory(int(irq_fired_addr), 4, 1)
-                finally:
-                    if stopped:
-                        try:
-                            self._gdb.cont()
-                        except Exception:  # noqa: BLE001
-                            pass
+                self._qmp.execute(
+                    "avatar-shadow-irq",
+                    {"number-addr": int(irq_number_addr),
+                     "fired-addr":  int(irq_fired_addr),
+                     "irq-num":     int(irq_num)},
+                )
                 return
             # No shadow-state — fall back to QMP pulse (works only
             # on e500 where the racy pulse happens to land).

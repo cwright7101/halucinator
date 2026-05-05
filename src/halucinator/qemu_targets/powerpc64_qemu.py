@@ -130,19 +130,20 @@ class PowerPC64QemuTarget(HALQemuTarget):
         raise NotImplementedError
 
     def inject_irq(self, irq_num: int) -> None:
-        """Deliver IRQ *irq_num* via shadow-write into the firmware's
-        irq_fired / irq_number globals — same pattern as
-        PowerPCQemuTarget.inject_irq. PPC970_INPUT_INT (slot 5) via
-        QMP would race against MTTCG, so we go straight to RAM.
+        """Deliver IRQ *irq_num* via avatar-qemu's avatar-shadow-irq
+        QMP command — see PowerPCQemuTarget.inject_irq for the
+        shadow-write rationale.
         """
         ctrl = getattr(self, "_irq_controller", None)
         irq_fired_addr = getattr(ctrl, "irq_fired_addr", None)
         irq_number_addr = getattr(ctrl, "irq_number_addr", None)
         if irq_fired_addr is not None and irq_number_addr is not None:
-            self.stop()
-            self.write_memory(int(irq_number_addr), 4, int(irq_num))
-            self.write_memory(int(irq_fired_addr), 4, 1)
-            self.cont()
+            self.protocols.monitor.execute_command(
+                "avatar-shadow-irq",
+                args={"number-addr": int(irq_number_addr),
+                      "fired-addr":  int(irq_fired_addr),
+                      "irq-num":     int(irq_num)},
+            )
             return
         self.protocols.monitor.execute_command(
             "avatar-ppc-inject-irq",

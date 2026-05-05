@@ -162,6 +162,9 @@ def setup_memory(
         memory.base_addr,
         memory.size,
     )
+    extra: Dict[str, Any] = {}
+    if memory.alias_at is not None:
+        extra["alias_at"] = int(memory.alias_at)
     avatar.add_memory_range(
         memory.base_addr,
         memory.size,
@@ -173,6 +176,7 @@ def setup_memory(
         irq=memory.irq_config,
         qemu_properties=memory.properties,
         regions=memory.regions,
+        **extra,
     )
 
     if record_memories is not None:

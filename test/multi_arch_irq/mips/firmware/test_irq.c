@@ -42,7 +42,7 @@ static volatile uint32_t irq_number = 0;
  * across unicorn's emu_start re-entry). Address 0x40000010 sits in
  * RAM (kuseg low) and is reachable without TLB setup. The firmware
  * reads from here so it sees the right interrupt id either way. */
-#define IRQ_SCRATCH (*(volatile uint32_t *)0xA0000010u)
+#define IRQ_SCRATCH (*(volatile uint32_t *)0xA0010010u)
 
 __attribute__((used)) void IRQ_Handler(uint32_t intid) {
     /* Prefer the register-passed value when non-zero (real CP0

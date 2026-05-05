@@ -57,6 +57,8 @@ class MipsController(IrqController):
         irq_simple_entry: int | None = None,
         irq_fired_addr: int | None = None,
         irq_number_addr: int | None = None,
+        irq_fired_phys_addr: int | None = None,
+        irq_number_phys_addr: int | None = None,
         options: Dict[str, Any] | None = None,
     ) -> None:
         # Trampoline address for in-process backends without a real
@@ -67,9 +69,19 @@ class MipsController(IrqController):
         self.irq_simple_entry = irq_simple_entry
         # Shadow-state addresses for in-process backends that
         # bypass the firmware ISR entirely and just write the
-        # post-ack globals.
+        # post-ack globals. *_addr is the kseg-virtual view the
+        # firmware uses (so unicorn / ghidra, which don't model
+        # MIPS MMU, read/write it directly); *_phys_addr is the
+        # physical translation for avatar-qemu's avatar-shadow-irq
+        # QMP path (which calls cpu_physical_memory_write). MIPS
+        # kseg0/kseg1 are hardware-mapped to the low 512 MB of
+        # physical address space, and our YAML also lists `alias_at`
+        # mirrors of the ram region at those physical addresses, so
+        # the two views address the same bytes.
         self.irq_fired_addr = irq_fired_addr
         self.irq_number_addr = irq_number_addr
+        self.irq_fired_phys_addr = irq_fired_phys_addr
+        self.irq_number_phys_addr = irq_number_phys_addr
         self.options = options or {}
 
     def trigger(self, backend: "HalBackend", num: int) -> None:

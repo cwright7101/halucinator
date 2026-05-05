@@ -235,32 +235,27 @@ class PowerPCQemuTarget(QemuTarget):
     _PPCE500_INPUT_INT = 4
 
     def inject_irq(self, irq_num: int) -> None:
-        """Deliver IRQ *irq_num* via shadow-write into the firmware's
-        irq_fired / irq_number globals.
+        """Deliver IRQ *irq_num* via avatar-qemu's avatar-shadow-irq
+        QMP command, which writes irq_fired / irq_number straight
+        into the firmware's RAM globals from the iothread (under
+        BQL, no GDB stub involvement).
 
-        avatar-qemu's configurable_machine doesn't instantiate an
-        OpenPIC peripheral the CPU listens on, and qemu_irq_pulse on
-        env->irq_inputs[] races against MTTCG (the assert+deassert
-        both land while BQL is held by the QMP thread, so the vCPU
-        never sees the level-high edge). Stop the CPU, write the
-        post-ack state directly into RAM, then resume — the firmware's
-        polling loop sees the flag flip on its next iteration. This
-        is the same pattern UnicornBackend uses for ppc via
-        _apply_pending_irq_ppc.
-
-        Falls back to the raw QMP avatar-ppc-inject-irq pulse when no
-        shadow-state addresses are configured (preserves the legacy
-        path for configs that don't declare an interrupt_controller
-        block).
+        Why not the GDB M-packet path: avatar-qemu's configurable
+        machine doesn't model an OpenPIC, and the alternative
+        env->irq_inputs[] pulse races MTTCG. The M-packet write
+        also collides with halucinator's dispatch loop holding the
+        GDB socket. Routing through QMP avoids both problems.
         """
         ctrl = getattr(self, "_irq_controller", None)
         irq_fired_addr = getattr(ctrl, "irq_fired_addr", None)
         irq_number_addr = getattr(ctrl, "irq_number_addr", None)
         if irq_fired_addr is not None and irq_number_addr is not None:
-            self.stop()
-            self.write_memory(int(irq_number_addr), 4, int(irq_num))
-            self.write_memory(int(irq_fired_addr), 4, 1)
-            self.cont()
+            self.protocols.monitor.execute_command(
+                "avatar-shadow-irq",
+                args={"number-addr": int(irq_number_addr),
+                      "fired-addr":  int(irq_fired_addr),
+                      "irq-num":     int(irq_num)},
+            )
             return
         self.protocols.monitor.execute_command(
             "avatar-ppc-inject-irq",

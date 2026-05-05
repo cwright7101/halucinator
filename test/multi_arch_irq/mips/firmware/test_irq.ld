@@ -8,12 +8,15 @@ PHDRS
 
 MEMORY
 {
-    /* Map flash at kseg0 (0x80000000-0x9FFFFFFF) which is the
-     * unmapped, cached, kernel segment — no TLB required. RAM at
-     * 0xA0000000 (kseg1, unmapped uncached) so MMIO/RAM both work
-     * regardless of TLB state. */
+    /* Map flash at kseg0 (0x80000000-0x9FFFFFFF) — unmapped,
+     * cached, kernel segment. RAM at kseg1 0xA0010000 (unmapped
+     * uncached). Putting ram at 0xA0010000 (not 0xA0000000) keeps
+     * its physical translation (kseg1 → phys: subtract 0xA0000000)
+     * separate from flash's (kseg0 → phys: subtract 0x80000000)
+     * so both can coexist in QEMU MIPS where the YAML `alias_at`
+     * mirror sits at the corresponding physical address. */
     flash (rx)  : ORIGIN = 0x80000000, LENGTH = 0x10000
-    ram   (rwx) : ORIGIN = 0xA0000000, LENGTH = 0x10000
+    ram   (rwx) : ORIGIN = 0xA0010000, LENGTH = 0x10000
 }
 
 SECTIONS
