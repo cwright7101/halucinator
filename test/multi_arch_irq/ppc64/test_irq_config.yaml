@@ -1,6 +1,6 @@
 machine:
   arch: ppc64
-  cpu_model: 970
+  cpu_model: 970_v2.2-powerpc64-cpu
   entry_addr: 0x00000000
   init_sp: 0x4000FF00
   vector_base: 0x00000000

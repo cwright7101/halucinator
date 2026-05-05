@@ -1,6 +1,6 @@
 machine:
   arch: powerpc
-  cpu_model: e500v2
+  cpu_model: e500v2_v22-powerpc-cpu
   entry_addr: 0x00000000
   init_sp: 0x4000FF00
   vector_base: 0x00000000
