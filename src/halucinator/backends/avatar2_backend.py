@@ -140,38 +140,43 @@ class Avatar2Backend(HalBackend):
             )
             return
         if arch == "mips":
+            ctrl = getattr(self, "_irq_controller", None)
+            irq_fired_phys = getattr(ctrl, "irq_fired_phys_addr", None)
+            irq_number_phys = getattr(ctrl, "irq_number_phys_addr", None)
+            if irq_fired_phys is not None and irq_number_phys is not None:
+                mon.execute_command(
+                    "avatar-shadow-irq",
+                    args={"number-addr": int(irq_number_phys),
+                          "fired-addr":  int(irq_fired_phys),
+                          "irq-num":     int(irq_num)},
+                )
+                return
             mon.execute_command(
                 "avatar-mips-inject-irq",
                 args={"num-irq": int(irq_num), "num-cpu": 0},
             )
             return
         if arch in ("powerpc", "powerpc:MPC8XX", "ppc64"):
-            # Shadow-write delivery: avatar-qemu's configurable_machine
-            # doesn't instantiate an OpenPIC peripheral the CPU
-            # listens on, and qemu_irq_pulse on env->irq_inputs[]
-            # races against MTTCG (the assert+deassert both land
-            # under BQL, so the vCPU never sees the level high).
-            # Instead, stop the CPU, write irq_number/irq_fired
-            # into the firmware's RAM globals, and resume — the
-            # firmware's polling loop picks it up on the next
-            # iteration. Same pattern UnicornBackend uses for ppc
-            # via _apply_pending_irq_ppc.
+            # Shadow-write delivery via avatar-qemu's QMP
+            # avatar-shadow-irq command — bypasses CPU exception
+            # machinery and the GDB-protocol M-packet path entirely.
+            # See qemu_backend.QEMUBackend.inject_irq for context.
             ctrl = getattr(self, "_irq_controller", None)
             irq_fired_addr = getattr(ctrl, "irq_fired_addr", None)
             irq_number_addr = getattr(ctrl, "irq_number_addr", None)
-            if irq_fired_addr is None or irq_number_addr is None:
-                # No shadow addresses configured — fall back to the
-                # QMP path (works for e500 but not 970).
+            if irq_fired_addr is not None and irq_number_addr is not None:
                 mon.execute_command(
-                    "avatar-ppc-inject-irq",
-                    args={"num-irq": 4 if arch != "ppc64" else 5,
-                          "num-cpu": 0},
+                    "avatar-shadow-irq",
+                    args={"number-addr": int(irq_number_addr),
+                          "fired-addr":  int(irq_fired_addr),
+                          "irq-num":     int(irq_num)},
                 )
                 return
-            self.target.stop()
-            self.target.write_memory(int(irq_number_addr), 4, int(irq_num))
-            self.target.write_memory(int(irq_fired_addr), 4, 1)
-            self.target.cont()
+            mon.execute_command(
+                "avatar-ppc-inject-irq",
+                args={"num-irq": 4 if arch != "ppc64" else 5,
+                      "num-cpu": 0},
+            )
             return
         # arm / arm64 / others: fall through to the generic
         # IrqController path on HalBackend (writes GICD_ISPENDR
