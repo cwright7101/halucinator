@@ -899,7 +899,7 @@ class QEMUBackend(ARM32HalMixin, HalBackend):
         if arch == "ppc64":
             self._qmp.execute(
                 "avatar-ppc-inject-irq",
-                {"num-irq": 0, "num-cpu": 0},
+                {"num-irq": 5, "num-cpu": 0},
             )
             return
         # Other arches use the IrqController via super().inject_irq
