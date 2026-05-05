@@ -154,7 +154,7 @@ class Avatar2Backend(HalBackend):
         if arch == "ppc64":
             mon.execute_command(
                 "avatar-ppc-inject-irq",
-                args={"num-irq": 0, "num-cpu": 0},
+                args={"num-irq": 5, "num-cpu": 0},
             )
             return
         # arm / arm64 / others: fall through to the generic

@@ -132,15 +132,15 @@ class PowerPC64QemuTarget(HALQemuTarget):
     def inject_irq(self, irq_num: int) -> None:
         """Pulse the PowerPC64 CPU's external interrupt input via
         avatar-qemu's ``avatar-ppc-inject-irq`` QMP command.
-        Always targets the canonical external IRQ slot regardless
-        of *irq_num*; PowerPC's env->irq_inputs[] is sparse and
-        index 0 is the standard external INT input on most
-        Book3S models.
+        Always targets PPC970_INPUT_INT (slot 5 on 970, see
+        target/ppc/cpu.h) regardless of the user-passed *irq_num*;
+        the configurable_machine wires env->irq_inputs[] sparsely
+        per-CPU model.
         """
         del irq_num
         self.protocols.monitor.execute_command(
             "avatar-ppc-inject-irq",
-            args={"num-irq": 0, "num-cpu": 0},
+            args={"num-irq": 5, "num-cpu": 0},
         )
 
     def irq_set_qmp(self, irq_num: int = 1) -> None:
