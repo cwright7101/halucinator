@@ -67,3 +67,19 @@ matrix_run.log
 deps/qemu-upstream*/
 deps/build-qemu-upstream*/
 deps/build-qemu-libafl/
+
+# Per-arch local QEMU builds (mounted into the matrix harness Docker
+# container; not shipped). One directory per `-target-list` softmmu.
+.build-arm/
+.build-aarch64/
+.build-mips/
+.build-ppc/
+.build-ppc64/
+
+# Local CI replay scratch (`ci-replay.sh` plus its captured logs).
+ci-replay.sh
+ci-pytest.log
+ci-replay.log
+config-temp/
+config.log
+run_renode.sh
