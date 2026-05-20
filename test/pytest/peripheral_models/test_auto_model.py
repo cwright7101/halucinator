@@ -43,13 +43,30 @@ def test_auto_busy_wait_respects_size():
     assert vals[-1] == 0xFFFF     # 2-byte read -> 16-bit all-ones
 
 
-def test_auto_captures_uart_output(caplog):
+def test_auto_captures_uart_output():
     import logging
-    p = AutoPeripheral("auto", 0x40000000, 0x1000)
-    with caplog.at_level(logging.INFO):
+
+    # The HAL logger ("HAL_LOG") doesn't propagate to the root logger
+    # caplog hooks, so capture it directly with our own handler.
+    records = []
+
+    class _Cap(logging.Handler):
+        def emit(self, record):
+            records.append(record.getMessage())
+
+    hlog = logging.getLogger("HAL_LOG")
+    handler = _Cap()
+    hlog.addHandler(handler)
+    old_level = hlog.level
+    hlog.setLevel(logging.INFO)
+    try:
+        p = AutoPeripheral("auto", 0x40000000, 0x1000)
         for ch in b"Grbl\n":
             p.hw_write(0x404, 1, ch, pc=0xA000)
-    assert any("Grbl" in r.getMessage() for r in caplog.records)
+    finally:
+        hlog.removeHandler(handler)
+        hlog.setLevel(old_level)
+    assert any("Grbl" in m for m in records)
 
 
 def test_auto_distinct_reads_do_not_trigger_stall():
