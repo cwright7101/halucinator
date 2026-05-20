@@ -1,0 +1,53 @@
+architecture: ARM
+base_address: 0
+entry_point: 0x080092c5
+
+intercepts:
+  # --- Capture UART output: usart_putc(char c) emits one byte over USART2.
+  # The real function busy-waits on the USART status register (TXE), which
+  # never sets under emulation, so intercepting it both avoids the hang and
+  # gives us the firmware's console output (the GRBL banner + settings).
+  - class: project.bp_handlers.cnc_uart.CncUart
+    function: usart_putc
+
+  # --- Neutralise the clock / systick / delay busy-waits. Each of these
+  # spins on RCC / SysTick bits that the GenericPeripheral can't satisfy.
+  - class: halucinator.bp_handlers.ReturnZero
+    function: SystemInit
+  - class: halucinator.bp_handlers.ReturnZero
+    function: SystemClock_Config
+  - class: halucinator.bp_handlers.ReturnZero
+    function: HAL_RCC_OscConfig
+  - class: halucinator.bp_handlers.ReturnZero
+    function: HAL_RCC_ClockConfig
+  - class: halucinator.bp_handlers.ReturnZero
+    function: HAL_Init
+  - class: halucinator.bp_handlers.ReturnZero
+    function: HAL_Delay
+  - class: halucinator.bp_handlers.ReturnZero
+    function: SysTick_Config
+  - class: halucinator.bp_handlers.ReturnZero
+    function: enable_usart_clock
+  - class: halucinator.bp_handlers.ReturnZero
+    function: usart_init
+  - class: halucinator.bp_handlers.ReturnZero
+    function: serial_init
+  - class: halucinator.bp_handlers.ReturnZero
+    function: _delay_ms
+  - class: halucinator.bp_handlers.ReturnZero
+    function: _delay_us
+  - class: halucinator.bp_handlers.ReturnZero
+    function: delay_ms
+  - class: halucinator.bp_handlers.ReturnZero
+    function: delay_us
+
+  # --- Halt cleanly if the firmware faults or hits its error trap.
+  - class: halucinator.bp_handlers.ReturnZero
+    function: Error_Handler
+
+  # --- aflCall is P2IM's AFL fuzz-harness hypercall (`svc #0x3f`) baked
+  # into these prebuilt binaries; it normally returns the fuzzer's value
+  # for a peripheral read. With no fuzzer attached the SVC traps, so
+  # intercept it to return 0 (peripheral reads default to 0).
+  - class: halucinator.bp_handlers.ReturnZero
+    function: aflCall
