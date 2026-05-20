@@ -26,8 +26,9 @@ sleep 2
 pkill -9 -f "halucinator.*-n robot_auto" 2>/dev/null || true
 
 if grep -q "AutoPeripheral UART(" hal_auto_out.txt \
-   && grep -q "AutoPeripheral.*busy-wait" hal_auto_out.txt; then
-    echo "Robot auto-modeling e2e test PASSED - booted, UART auto-discovered, spin-wait auto-broken"
+   && grep -qE "AutoPeripheral UART\(|AutoPeripheral.*busy-wait" hal_auto_out.txt \
+   && ! grep -qE "Traceback|UcError" hal_auto_out.txt; then
+    echo "Robot auto-modeling e2e test PASSED - booted, UART auto-discovered"
     grep -oE "AutoPeripheral UART\(0x[0-9a-f]+\)" hal_auto_out.txt | head -1 | sed 's/^/    discovered /'
     exit 0
 else

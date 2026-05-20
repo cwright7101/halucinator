@@ -944,6 +944,11 @@ def _emulate_with_unicorn_backend(
                 auto_peripherals.append(periph)
                 if periph.__class__.__name__ == "AutoPeripheral":
                     backend.skip_svc = True
+                    # NB: backend.auto_recover_loops stays OFF — forcing a
+                    # return out of a non-MMIO loop can land on a stale LR and
+                    # fault. It's available for opt-in experiments but the
+                    # MMIO breaker + skip_svc are enough to keep firmware
+                    # running for these targets.
         log.info("Adding Memory: %s Addr: 0x%08x Size: 0x%08x%s",
                  memory.name, memory.base_addr, memory.size,
                  f" (emulate={emulate_name})" if emulate_name else "")
@@ -983,6 +988,10 @@ def _emulate_with_unicorn_backend(
     periph_thread.start()
 
     def _shutdown() -> None:
+        # Diagnostic PC histogram (HAL_PC_SAMPLE=1) — locate non-MMIO hangs.
+        dump = getattr(backend, "dump_pc_sample", None)
+        if callable(dump):
+            dump()
         # Persist any recording/auto peripheral traces before teardown.
         for periph in auto_peripherals:
             try:

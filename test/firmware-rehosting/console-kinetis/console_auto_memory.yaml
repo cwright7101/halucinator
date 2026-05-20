@@ -1,0 +1,26 @@
+# NXP Kinetis K-series (Cortex-M4) memory map for the P2IM Console firmware (auto-modeling path).
+machine:
+  arch: cortex-m3
+  cpu_model: cortex-m3
+  entry_addr: 0x0000099d
+  init_sp: 0x1fff0200
+  vector_base: 0x00000000
+
+memories:
+  flash:
+    base_addr: 0x00000000
+    file: Console.bin
+    permissions: r-x
+    size: 0x100000
+  ram:
+    base_addr: 0x1fff0000
+    size: 0x40000
+  halucinator-irq: {base_addr: 0x3ffc000, size: 0x4000}
+  halucinator: {base_addr: 0x04000000, size: 0x100000}
+
+peripherals:
+  logger:
+    base_addr: 0x40000000
+    emulate: AutoPeripheral
+    permissions: rw-
+    size: 0x20000000

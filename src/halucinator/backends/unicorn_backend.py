@@ -248,6 +248,13 @@ class UnicornBackend(ARMHalMixin, HalBackend):
         # (e.g. P2IM's aflCall `svc #0x3f`).
         self.skip_svc: bool = False
 
+        # Generic non-MMIO loop breaker (see _code_hook). Opt-in.
+        self.auto_recover_loops: bool = False
+        self._loop_lo: int = -1
+        self._loop_count: int = 0
+        self._loop_limit: int = 500_000
+        self._loop_recover_budget: int = 200
+
         # Pre-compute the register name -> unicorn reg id map for this arch.
         self._reg_map = _reg_map_for_arch(arch)
         # Cache arch traits from _ARCH_MAP for hot paths (cont/read_memory).
@@ -364,6 +371,31 @@ class UnicornBackend(ARMHalMixin, HalBackend):
         )
         # Log CPU exceptions (unhandled traps, illegal insns, FP faults)
         self._uc.hook_add(unicorn.UC_HOOK_INTR, self._intr_hook)
+
+        # Diagnostic: HAL_PC_SAMPLE=1 records a PC execution histogram so a
+        # non-MMIO hang ("stuck where?") can be located. Dumped by
+        # dump_pc_sample(). Off by default (no overhead).
+        import os as _os
+        if _os.environ.get("HAL_PC_SAMPLE"):
+            import collections as _c
+            self._pc_hist = _c.Counter()
+            self._pc_n = 0
+            _every = int(_os.environ.get("HAL_PC_SAMPLE_EVERY", "3000000"))
+
+            def _pc_sample(uc, addr, size, ud):
+                self._pc_hist[addr & ~1] += 1
+                self._pc_n += 1
+                if _every and self._pc_n % _every == 0:
+                    self.dump_pc_sample()
+            self._uc.hook_add(unicorn.UC_HOOK_CODE, _pc_sample)
+
+    def dump_pc_sample(self, top: int = 10) -> None:
+        hist = getattr(self, "_pc_hist", None)
+        if not hist:
+            return
+        log.error("PC sample (top %d most-executed):", top)
+        for pc, n in hist.most_common(top):
+            log.error("  0x%08x  x%d", pc, n)
 
     def _intr_hook(self, uc, intno, user_data):
         try:
@@ -505,6 +537,35 @@ class UnicornBackend(ARMHalMixin, HalBackend):
             self._stopped = True
             self._bp_hit_addr = pc
             uc.emu_stop()
+            return
+
+        # Generic non-MMIO loop breaker (opt-in via auto_recover_loops, set
+        # alongside AutoPeripheral). The MMIO breaker handles status-poll
+        # spins; this handles the *non*-MMIO ones — `while(uwTick<t)`,
+        # `while(millis()<t)`, HAL_GetTick timeouts — that confine the PC to
+        # a tiny window. After `_loop_limit` instructions stuck in a <=64-byte
+        # window we force a return (pc <- lr) to escape the wait, capped by
+        # `_loop_recover_budget` so a genuinely long computation isn't
+        # repeatedly hijacked.
+        if not getattr(self, "auto_recover_loops", False):
+            return
+        lo = self._loop_lo
+        if lo <= pc <= lo + 64:
+            self._loop_count += 1
+            if self._loop_count > self._loop_limit and self._loop_recover_budget > 0:
+                lr_reg = self._reg_map.get("lr")
+                if lr_reg is not None:
+                    lr = uc.reg_read(lr_reg)
+                    self._loop_recover_budget -= 1
+                    log.info("UnicornBackend: non-MMIO loop at 0x%08x stuck "
+                             "%d insns -> return to lr=0x%08x",
+                             pc, self._loop_count, lr & ~1)
+                    self._loop_lo = -1
+                    self._loop_count = 0
+                    uc.reg_write(self._reg_map["pc"], lr & ~1 | (lr & 1))
+        else:
+            self._loop_lo = pc
+            self._loop_count = 1
 
     # ------------------------------------------------------------------
     # Memory

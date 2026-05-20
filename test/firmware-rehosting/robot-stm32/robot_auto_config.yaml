@@ -15,3 +15,7 @@ intercepts:
   - {class: halucinator.bp_handlers.ReturnZero, function: HAL_Delay}
   - {class: halucinator.bp_handlers.ReturnZero, function: RCC_Delay}
   - {class: halucinator.bp_handlers.ReturnZero, function: HAL_RCC_ClockConfig}
+  - {class: halucinator.bp_handlers.generic.counter.Counter, function: HAL_GetTick, registration_args: {increment: 1000}}
+  - {class: halucinator.bp_handlers.generic.counter.Counter, function: millis, registration_args: {increment: 1000}}
+  - {class: halucinator.bp_handlers.generic.counter.Counter, function: GetTickCount, registration_args: {increment: 1000}}
+  - {class: halucinator.bp_handlers.generic.counter.Counter, function: micros, registration_args: {increment: 1000}}

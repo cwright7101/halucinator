@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import logging
 import sqlite3
+import time
 from typing import Any, Dict, List, Optional, Tuple
 
 from .generic import GenericPeripheral
@@ -42,16 +43,32 @@ hlog = hal_log.getHalLogger()
 class RecordingPeripheral(GenericPeripheral):
     """Catch-all that records every access. Reads still return 0."""
 
+    # Flush to SQLite every this many accesses so the trace survives even a
+    # hard kill (firmware that spins forever never lets a clean shutdown /
+    # flush run, because the unicorn emu_start C loop doesn't return).
+    FLUSH_EVERY = 4096      # accesses
+    FLUSH_SECONDS = 2.0     # ...or wall-clock, whichever comes first
+
     def __init__(self, name: str, address: int, size: int,
                  db_path: Optional[str] = None, **kwargs: Any) -> None:
         super().__init__(name, address, size, **kwargs)
         self.db_path = db_path
         self._seq = 0
+        self._flushed = 0
+        self._conn: Optional[sqlite3.Connection] = None
+        self._last_flush = time.monotonic()
         self.trace: List[Tuple[int, int, int, int, int, str]] = []
 
     def _record(self, pc: int, addr: int, size: int, value: int, rw: str) -> None:
         self.trace.append((self._seq, pc, addr, size, value, rw))
         self._seq += 1
+        # Flush on either a count threshold (chatty firmware) or a wall-clock
+        # interval (low-MMIO firmware that loops forever in compute) — the
+        # emu_start C loop never returns so a clean-shutdown flush can't run.
+        if self.db_path and (self._seq - self._flushed) >= self.FLUSH_EVERY:
+            self.flush()
+        elif self.db_path and (time.monotonic() - self._last_flush) >= self.FLUSH_SECONDS:
+            self.flush()
 
     def hw_read(self, offset: int, size: int, pc: int = 0xBAADBAAD, **kwargs: Any) -> int:
         addr = self.address + offset
@@ -65,27 +82,38 @@ class RecordingPeripheral(GenericPeripheral):
         return True
 
     def flush(self) -> None:
-        """Persist the trace to SQLite if a db_path was configured."""
+        """Persist new trace rows to SQLite (incremental). Safe to call
+        repeatedly; only rows since the last flush are written."""
         if not self.db_path:
             return
-        conn = sqlite3.connect(self.db_path)
-        try:
-            conn.execute(
+        if self._conn is None:
+            self._conn = sqlite3.connect(self.db_path)
+            self._conn.execute(
                 "CREATE TABLE IF NOT EXISTS mmio_trace ("
                 "id INTEGER PRIMARY KEY AUTOINCREMENT, region TEXT, seq INTEGER,"
                 " pc INTEGER, addr INTEGER, size INTEGER, value INTEGER, rw TEXT)")
-            conn.executemany(
+        new = self.trace[self._flushed:]
+        if new:
+            self._conn.executemany(
                 "INSERT INTO mmio_trace(region, seq, pc, addr, size, value, rw)"
                 " VALUES (?,?,?,?,?,?,?)",
                 [(self.name, s, pc, a, sz, v, rw)
-                 for (s, pc, a, sz, v, rw) in self.trace])
-            conn.commit()
-        finally:
-            conn.close()
+                 for (s, pc, a, sz, v, rw) in new])
+            self._conn.commit()
+            self._flushed = len(self.trace)
+        self._last_flush = time.monotonic()
+        # Drop the in-memory prefix we've persisted to bound memory on
+        # long-running (looping) firmware, keeping seq numbers intact.
+        if self._flushed > 200_000:
+            self.trace = self.trace[self._flushed:]
+            self._flushed = 0
 
     def shutdown(self) -> None:  # noqa: D401
         try:
             self.flush()
+            if self._conn is not None:
+                self._conn.close()
+                self._conn = None
         except Exception:  # noqa: BLE001
             log.exception("RecordingPeripheral flush failed")
         super().shutdown() if hasattr(super(), "shutdown") else None

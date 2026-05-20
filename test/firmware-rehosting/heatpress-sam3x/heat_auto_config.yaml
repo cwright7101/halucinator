@@ -1,0 +1,30 @@
+# Auto-modeling rehost of the P2IM Heat_Press firmware (Atmel SAM3X / Arduino Due (Cortex-M3)).
+# AutoPeripheral (see *_auto_memory.yaml) breaks the MMIO spin-waits and
+# auto-discovers the UART data register; the unicorn backend's skip_svc
+# steps over P2IM's aflCall. Only non-MMIO clock/delay setup is stubbed
+# (the superset below; symbols not present in this firmware are skipped).
+architecture: ARM
+base_address: 0
+entry_point: 0x00080f25
+intercepts:
+  - {class: halucinator.bp_handlers.ReturnZero, function: SystemInit}
+  - {class: halucinator.bp_handlers.ReturnZero, function: SystemClock_Config}
+  - {class: halucinator.bp_handlers.ReturnZero, function: HAL_Init}
+  - {class: halucinator.bp_handlers.ReturnZero, function: HAL_InitTick}
+  - {class: halucinator.bp_handlers.ReturnZero, function: HAL_Delay}
+  - {class: halucinator.bp_handlers.ReturnZero, function: RCC_Delay}
+  - {class: halucinator.bp_handlers.ReturnZero, function: HAL_RCC_OscConfig}
+  - {class: halucinator.bp_handlers.ReturnZero, function: HAL_RCC_ClockConfig}
+  - {class: halucinator.bp_handlers.ReturnZero, function: HAL_RCC_GetSysClockFreq}
+  - {class: halucinator.bp_handlers.ReturnZero, function: SysTick_Config}
+  - {class: halucinator.bp_handlers.ReturnZero, function: SystemCoreClockUpdate}
+  - {class: halucinator.bp_handlers.ReturnZero, function: delay}
+  - {class: halucinator.bp_handlers.ReturnZero, function: delay_ms}
+  - {class: halucinator.bp_handlers.ReturnZero, function: delay_us}
+  - {class: halucinator.bp_handlers.ReturnZero, function: _delay_ms}
+  - {class: halucinator.bp_handlers.ReturnZero, function: _delay_us}
+  - {class: halucinator.bp_handlers.ReturnZero, function: Error_Handler}
+  - {class: halucinator.bp_handlers.generic.counter.Counter, function: HAL_GetTick, registration_args: {increment: 1000}}
+  - {class: halucinator.bp_handlers.generic.counter.Counter, function: millis, registration_args: {increment: 1000}}
+  - {class: halucinator.bp_handlers.generic.counter.Counter, function: GetTickCount, registration_args: {increment: 1000}}
+  - {class: halucinator.bp_handlers.generic.counter.Counter, function: micros, registration_args: {increment: 1000}}
