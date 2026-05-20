@@ -1,0 +1,43 @@
+# STM32F407VG (Cortex-M4) memory map for the GRBL CNC controller from the
+# P2IM real-firmware dataset. Emulated as cortex-m3 (GRBL is integer-only
+# motion control; the unicorn backend's cortex-m3 model covers it).
+machine:
+  arch: cortex-m3
+  cpu_model: cortex-m3
+  entry_addr: 0x080092c5      # Reset_Handler (vector[1])
+  init_sp: 0x20020000         # top of the 128 KB main SRAM
+  vector_base: 0x08000000
+
+memories:
+  # Cortex-M boots from 0x0, which on STM32 aliases to flash at 0x08000000.
+  alias:
+    base_addr: 0x0
+    file: CNC.bin
+    permissions: r-x
+    size: 0x100000
+  flash:
+    base_addr: 0x08000000
+    file: CNC.bin
+    permissions: r-x
+    size: 0x100000            # 1 MB flash on the F407VG
+  ram:
+    base_addr: 0x20000000
+    size: 0x20000             # 128 KB main SRAM
+  ccm:
+    base_addr: 0x10000000
+    size: 0x10000             # 64 KB core-coupled memory
+  halucinator-irq:
+    base_addr: 0x3ffc000
+    size: 0x4000
+  halucinator:
+    base_addr: 0x04000000
+    size: 0x100000
+
+peripherals:
+  # Catch-all so any unmodeled MMIO read returns 0 / write is swallowed
+  # instead of faulting. Covers the whole STM32 peripheral window.
+  logger:
+    base_addr: 0x40000000
+    emulate: AutoPeripheral
+    permissions: rw-
+    size: 0x20000000

@@ -863,6 +863,23 @@ def _qemu_backend_dispatch_loop(backend: "HalBackend") -> None:
             backend.cont()
 
 
+def _instantiate_peripheral(name: str, memory: Any, db_path: str) -> Any:
+    """Resolve an `emulate:` peripheral name to an instance. Searches the
+    auto_model module (RecordingPeripheral/AutoPeripheral) then the
+    generic module (GenericPeripheral/HaltPeripheral). Returns None if the
+    name is unknown (region falls back to plain RAM)."""
+    from halucinator.peripheral_models import auto_model, generic
+    cls = getattr(auto_model, name, None) or getattr(generic, name, None)
+    if cls is None:
+        log.warning("Unknown emulate peripheral %r; region %s left as RAM",
+                    name, memory.name)
+        return None
+    kwargs: Dict[str, Any] = {}
+    if name in ("RecordingPeripheral", "AutoPeripheral"):
+        kwargs["db_path"] = db_path
+    return cls(memory.name, memory.base_addr, memory.size, **kwargs)
+
+
 def _emulate_with_unicorn_backend(
     config: Any,
     target_name: Optional[str],
@@ -896,7 +913,12 @@ def _emulate_with_unicorn_backend(
     backend: "HalBackend" = UnicornBackend(arch=arch)
 
     # Register memory regions from config, loading any firmware file bytes
-    # into the region on add.
+    # into the region on add. Regions with an `emulate:` peripheral get
+    # their hw_read/hw_write bound to the unicorn MMIO hooks (the avatar2
+    # path does this via avatar-rmemory; the in-process path needs it
+    # wired explicitly).
+    auto_peripherals: List[Any] = []
+    mmio_db = os.path.join(outdir, "mmio_trace.sqlite")
     for memory in config.memories.values():
         region = MemoryRegion(
             name=memory.name,
@@ -905,8 +927,22 @@ def _emulate_with_unicorn_backend(
             permissions=memory.permissions or "rwx",
             file=memory.file,
         )
-        log.info("Adding Memory: %s Addr: 0x%08x Size: 0x%08x",
-                 memory.name, memory.base_addr, memory.size)
+        emulate_name = getattr(memory, "emulate", None)
+        if emulate_name:
+            periph = _instantiate_peripheral(emulate_name, memory, mmio_db)
+            if periph is not None:
+                region.read_hook = (
+                    lambda off, sz, _p=periph, _b=backend: _p.hw_read(
+                        off, sz, pc=_b.regs.pc))
+                region.write_hook = (
+                    lambda off, sz, val, _p=periph, _b=backend: _p.hw_write(
+                        off, sz, val, pc=_b.regs.pc))
+                auto_peripherals.append(periph)
+                if periph.__class__.__name__ == "AutoPeripheral":
+                    backend.skip_svc = True
+        log.info("Adding Memory: %s Addr: 0x%08x Size: 0x%08x%s",
+                 memory.name, memory.base_addr, memory.size,
+                 f" (emulate={emulate_name})" if emulate_name else "")
         backend.add_memory_region(region)
 
     backend.init()
@@ -943,6 +979,12 @@ def _emulate_with_unicorn_backend(
     periph_thread.start()
 
     def _shutdown() -> None:
+        # Persist any recording/auto peripheral traces before teardown.
+        for periph in auto_peripherals:
+            try:
+                periph.flush()
+            except Exception:  # noqa: BLE001
+                log.exception("peripheral flush failed")
         try:
             backend.shutdown()
         except Exception:  # noqa: BLE001
@@ -955,6 +997,9 @@ def _emulate_with_unicorn_backend(
 
     signal.signal(signal.SIGINT, _sigint)
 
+    if auto_peripherals:
+        log.info("Auto-modeling peripherals active: %s (mmio trace -> %s)",
+                 [p.__class__.__name__ for p in auto_peripherals], mmio_db)
     log.info("Letting Unicorn Run (direct backend)")
     try:
         _in_process_dispatch_loop(backend)

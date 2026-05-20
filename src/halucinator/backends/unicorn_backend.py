@@ -242,6 +242,12 @@ class UnicornBackend(ARMHalMixin, HalBackend):
         # so the synthetic exception frame is set up single-threaded.
         self._pending_irqs: List[int] = []
 
+        # Opt-in: skip an unhandled SVC instruction (advance past it and
+        # zero r0) instead of aborting. Used by the auto-modeling path to
+        # tolerate fuzz-harness hypercalls baked into instrumented binaries
+        # (e.g. P2IM's aflCall `svc #0x3f`).
+        self.skip_svc: bool = False
+
         # Pre-compute the register name -> unicorn reg id map for this arch.
         self._reg_map = _reg_map_for_arch(arch)
         # Cache arch traits from _ARCH_MAP for hot paths (cont/read_memory).
@@ -372,6 +378,23 @@ class UnicornBackend(ARMHalMixin, HalBackend):
                 and pc != -1
                 and self._maybe_handle_exc_return(pc)):
             return  # _maybe_handle_exc_return already called emu_stop
+        # Opt-in recovery: a Thumb SVC (high byte 0xDF) from instrumented
+        # firmware (e.g. P2IM aflCall). When the SVC traps, unicorn reports
+        # pc at the *next* instruction, so the SVC opcode is at pc or pc-2.
+        # We zero the return register and continue without stopping (pc has
+        # already advanced past the SVC), rather than aborting the run.
+        if self.skip_svc and pc != -1:
+            try:
+                for probe in (pc - 2, pc):
+                    op = bytes(uc.mem_read(probe, 2))
+                    if len(op) == 2 and op[1] == 0xDF:  # Thumb SVC
+                        # ensure pc is past the SVC, then resume
+                        if probe == pc:
+                            self.write_register("pc", pc + 2)
+                        self.write_register("r0", 0)
+                        return
+            except Exception:  # noqa: BLE001
+                pass
         log.error("UnicornBackend: CPU exception/interrupt %d at pc=0x%x",
                   intno, pc)
         uc.emu_stop()

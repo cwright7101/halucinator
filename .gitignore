@@ -29,6 +29,7 @@ test/firmware-rehosting/cnc-grbl/CNC.bin
 test/firmware-rehosting/cnc-grbl/cnc_addrs.yaml
 test/firmware-rehosting/cnc-grbl/build/
 test/firmware-rehosting/cnc-grbl/hal_out.txt
+test/firmware-rehosting/cnc-grbl/hal_auto_out.txt
 test/firmware-rehosting/cnc-grbl/tmp/
 deps/build-qemu/*.vsix
 # Test output artifacts

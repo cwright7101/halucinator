@@ -1,0 +1,27 @@
+# Auto-modeling demo. The headline: AutoPeripheral (cnc_auto_memory.yaml)
+# AUTO-DISCOVERS the UART — there is NO usart_putc / usart_init /
+# serial_init intercept. The firmware's real usart_putc runs: its USART2
+# TXE status-register spin-wait is broken by the MMIO busy-wait breaker,
+# and its write of each character to the USART2 data register is captured
+# and surfaced as console output. skip_svc steps over P2IM's aflCall.
+#
+# Clock/PLL bring-up and ISR-driven delays are still stubbed: the all-ones
+# the spin-wait breaker injects corrupts downstream clock-frequency
+# *computation* (a known limitation of naive MMIO value heuristics; the
+# fix is symbolic refinement a la uEmu/Fuzzware — see
+# docs/auto-peripheral-modeling.md). Those stubs are non-MMIO, so an MMIO
+# modeler can't infer them anyway.
+architecture: ARM
+base_address: 0
+entry_point: 0x080092c5
+intercepts:
+  - {class: halucinator.bp_handlers.ReturnZero, function: SystemInit}
+  - {class: halucinator.bp_handlers.ReturnZero, function: SystemClock_Config}
+  - {class: halucinator.bp_handlers.ReturnZero, function: HAL_Init}
+  - {class: halucinator.bp_handlers.ReturnZero, function: HAL_Delay}
+  - {class: halucinator.bp_handlers.ReturnZero, function: _delay_ms}
+  - {class: halucinator.bp_handlers.ReturnZero, function: _delay_us}
+  - {class: halucinator.bp_handlers.ReturnZero, function: delay_ms}
+  - {class: halucinator.bp_handlers.ReturnZero, function: delay_us}
+  - {class: halucinator.bp_handlers.ReturnZero, function: SysTick_Config}
+  - {class: halucinator.bp_handlers.ReturnZero, function: Error_Handler}
