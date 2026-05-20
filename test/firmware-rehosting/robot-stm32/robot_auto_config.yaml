@@ -1,0 +1,17 @@
+# Auto-modeling rehost of the P2IM self-balancing-robot firmware
+# (STM32F103, STM32 HAL). The AutoPeripheral (robot_auto_memory.yaml)
+# breaks the HAL_UART_Transmit TXE/TC spin-waits and the RCC clock
+# ready-bit waits, and captures the USART data-register writes as console
+# output. skip_svc steps over P2IM's aflCall. Only the non-MMIO setup
+# (clock bring-up, ISR-driven delays) is stubbed.
+architecture: ARM
+base_address: 0
+entry_point: 0x080057e9
+intercepts:
+  - {class: halucinator.bp_handlers.ReturnZero, function: SystemInit}
+  - {class: halucinator.bp_handlers.ReturnZero, function: SystemClock_Config}
+  - {class: halucinator.bp_handlers.ReturnZero, function: HAL_Init}
+  - {class: halucinator.bp_handlers.ReturnZero, function: HAL_InitTick}
+  - {class: halucinator.bp_handlers.ReturnZero, function: HAL_Delay}
+  - {class: halucinator.bp_handlers.ReturnZero, function: RCC_Delay}
+  - {class: halucinator.bp_handlers.ReturnZero, function: HAL_RCC_ClockConfig}

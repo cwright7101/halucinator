@@ -1,0 +1,37 @@
+# STM32F103RB (Cortex-M3) memory map for the P2IM self-balancing-robot
+# controller. Auto-modeling path: the catch-all peripheral is the
+# AutoPeripheral, which breaks MMIO spin-waits and auto-discovers the UART.
+machine:
+  arch: cortex-m3
+  cpu_model: cortex-m3
+  entry_addr: 0x080057e9      # Reset_Handler
+  init_sp: 0x20005000         # top of the 20 KB SRAM
+  vector_base: 0x08000000
+
+memories:
+  alias:
+    base_addr: 0x0
+    file: Robot.bin
+    permissions: r-x
+    size: 0x100000
+  flash:
+    base_addr: 0x08000000
+    file: Robot.bin
+    permissions: r-x
+    size: 0x20000             # 128 KB flash
+  ram:
+    base_addr: 0x20000000
+    size: 0x5000              # 20 KB SRAM
+  halucinator-irq:
+    base_addr: 0x3ffc000
+    size: 0x4000
+  halucinator:
+    base_addr: 0x04000000
+    size: 0x100000
+
+peripherals:
+  logger:
+    base_addr: 0x40000000
+    emulate: AutoPeripheral
+    permissions: rw-
+    size: 0x20000000

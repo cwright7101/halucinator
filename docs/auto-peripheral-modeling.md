@@ -1,8 +1,15 @@
 # Automatic peripheral-model generation for HALucinator
 
-> Status: design / research note. Nothing here is implemented yet — this
-> is the plan for turning the manual rehosting workflow into an
-> (optionally LLM-assisted) automatic one.
+> Status: **Phases 0–4 implemented and demonstrated on real firmware.**
+> The runtime half is `peripheral_models/auto_model.py`
+> (RecordingPeripheral / AutoPeripheral), wired into the unicorn path; the
+> offline half is `halucinator.automodel.synthesize`; the LLM layer is
+> `halucinator.llm` (pluggable provider). Demonstrated on the GRBL CNC
+> (`test/firmware-rehosting/cnc-grbl/run_tests_auto.bash`) and the
+> STM32F103 robot (`test/firmware-rehosting/robot-stm32/`). The remaining
+> gap is the symbolic-refinement value heuristic needed for fully
+> unattended boot of busy-wait-on-RAM / clock-compute code — see
+> "Effort / risk".
 
 ## Motivation
 
