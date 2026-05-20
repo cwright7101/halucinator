@@ -1016,6 +1016,7 @@ def _renode_mmio_setup(
     from halucinator.backends.renode_mmio import (
         RenodeMMIOServer, emit_repl_python_peripherals,
     )
+    from avatar2.peripherals.avatar_peripheral import AvatarPeripheral
     peripherals: List[Tuple[str, int, int]] = []
     instances: List[Tuple[int, AvatarPeripheral]] = []
     added: set = set()
