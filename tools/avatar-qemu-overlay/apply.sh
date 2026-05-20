@@ -3,34 +3,46 @@
 # source tree.
 #
 # usage:
-#   tools/avatar-qemu-overlay/apply.sh <upstream-qemu-src-dir>
+#   tools/avatar-qemu-overlay/apply.sh <upstream-qemu-src-dir> [version]
 #
-# What it does:
-#   1. Copies hw/avatar/* and qapi/avatar-target.json into the target
-#      source tree (purely additive — no mainline files touched).
-#   2. Applies the curated mainline-hook patches in patches/*.patch in
-#      lexical order (currently a single combined patch).
+# Picks a version-specific subdirectory of the overlay based on the
+# upstream QEMU's VERSION file (or the optional explicit *version*
+# argument). Currently shipped subdirs:
 #
-# The result is a source tree functionally equivalent to avatar-qemu
-# for halucinator's purposes — same `configurable` machine, same
-# `avatar-rmemory` device, same QMP commands — but on top of whatever
-# QEMU release the user supplied.
+#   v6.2.x/   verified against QEMU 6.2.0 (matches the avatar-qemu fork
+#             our default `qemu` backend tracks).
+#   v10.x/    verified against QEMU 10.0.3 (matches libafl-qemu-bridge;
+#             the avatar layer's API surface shifted between 6.2 and
+#             10 enough that a separate variant is cleaner than one
+#             with #ifdef walls).
 #
-# Verified against QEMU v6.2.0. Newer releases may need patch refresh;
-# the patches/*.patch files are short and self-contained, so a
-# refresh is mostly a 3-way merge of header layouts that shifted.
+# What it does for each version:
+#   1. Copies the version's hw/avatar/, qapi/avatar-target.json, and
+#      (if present) include/hw/avatar/ headers into the target source
+#      tree. Purely additive — no mainline files touched in this step.
+#   2. Applies the version's patches/*.patch in lexical order — the
+#      small set of mainline-file hooks (machine class, NVIC IRQ
+#      hook, build-system glue, log mask).
+#
+# Forward-port to a new QEMU release = create a new version subdir,
+# refresh the mainline patches against the new base, smoke-test it
+# builds. The header + .c files usually only need cosmetic updates
+# since they live in their own hw/avatar/ namespace.
 set -o errexit
 
 usage() {
-    echo "usage: $0 <upstream-qemu-src-dir>" >&2
+    echo "usage: $0 <upstream-qemu-src-dir> [version-subdir]" >&2
+    echo "  version-subdir defaults to v6.2.x if VERSION starts with 6.," >&2
+    echo "  v10.x if VERSION starts with 10. or 11.." >&2
     exit 2
 }
 
-if [ $# -ne 1 ]; then
+if [ $# -lt 1 ] || [ $# -gt 2 ]; then
     usage
 fi
 
 QEMU_SRC=$1
+EXPLICIT_VARIANT=${2:-}
 if [ ! -d "$QEMU_SRC" ]; then
     echo "$0: '$QEMU_SRC' is not a directory" >&2
     exit 1
@@ -42,28 +54,124 @@ fi
 
 OVERLAY_DIR="$(cd "$(dirname "$0")" && pwd)"
 
-echo "[apply.sh] copying additive overlay into $QEMU_SRC"
-mkdir -p "$QEMU_SRC/hw/avatar"
-cp -f "$OVERLAY_DIR"/hw/avatar/* "$QEMU_SRC/hw/avatar/"
-cp -f "$OVERLAY_DIR"/qapi/avatar-target.json "$QEMU_SRC/qapi/"
+# Pick the version subdir.
+if [ -n "$EXPLICIT_VARIANT" ]; then
+    VARIANT="$EXPLICIT_VARIANT"
+else
+    QEMU_VER=""
+    if [ -f "$QEMU_SRC/VERSION" ]; then
+        QEMU_VER=$(head -n1 "$QEMU_SRC/VERSION" | tr -d ' \t\n')
+    fi
+    case "$QEMU_VER" in
+        6.*)        VARIANT="v6.2.x"  ;;
+        10.*|11.*)  VARIANT="v10.x"   ;;
+        *)
+            echo "[apply.sh] unrecognised QEMU VERSION '$QEMU_VER';" >&2
+            echo "[apply.sh] pass an explicit variant subdir as the 2nd arg," >&2
+            echo "[apply.sh] e.g. '$0 $QEMU_SRC v10.x'." >&2
+            echo "[apply.sh] Available: $(ls -d "$OVERLAY_DIR"/v* 2>/dev/null | xargs -n1 basename | tr '\n' ' ')" >&2
+            exit 1
+            ;;
+    esac
+fi
+
+VARIANT_DIR="$OVERLAY_DIR/$VARIANT"
+if [ ! -d "$VARIANT_DIR" ]; then
+    echo "[apply.sh] no overlay variant at '$VARIANT_DIR'" >&2
+    exit 1
+fi
+
+echo "[apply.sh] target: $QEMU_SRC  variant: $VARIANT"
+
+echo "[apply.sh] copying additive overlay"
+mkdir -p "$QEMU_SRC/hw/avatar" "$QEMU_SRC/qapi"
+cp -f "$VARIANT_DIR"/hw/avatar/* "$QEMU_SRC/hw/avatar/"
+cp -f "$VARIANT_DIR"/qapi/avatar-target.json "$QEMU_SRC/qapi/"
+if [ -d "$VARIANT_DIR/include/hw/avatar" ]; then
+    mkdir -p "$QEMU_SRC/include/hw/avatar"
+    cp -f "$VARIANT_DIR"/include/hw/avatar/* "$QEMU_SRC/include/hw/avatar/"
+fi
+
+# QEMU 8+ poisons per-target CONFIG_* macros in target-agnostic / per-
+# arch-common compilation units (see include/exec/poison.h built from
+# scripts/make-config-poison.sh). CONFIG_AVATAR is a per-target Kconfig
+# symbol, so the auto-generated poison list would block our
+# `#ifdef CONFIG_AVATAR` hooks in hw/intc/armv7m_nvic.c (built into
+# libsystem_arm, which is arm-common but not avatar-aware). QEMU
+# already pokes a hole here for CONFIG_TCG / CONFIG_USER_ONLY /
+# CONFIG_SOFTMMU using the same sed exclusion trick; we just add
+# CONFIG_AVATAR to that list. Skipped on QEMU 6.x (script doesn't
+# exist there — v6.2 wires poison differently).
+POISON_SCRIPT="$QEMU_SRC/scripts/make-config-poison.sh"
+if [ -f "$POISON_SCRIPT" ] && ! grep -q "CONFIG_AVATAR/d" "$POISON_SCRIPT"; then
+    echo "[apply.sh] exempting CONFIG_AVATAR from make-config-poison.sh"
+    # Insert the new sed -e clause immediately after the CONFIG_SOFTMMU
+    # one so the surrounding ordering still reads naturally.
+    if [ "$(uname -s)" = "Darwin" ]; then
+        sed -i '' "/CONFIG_SOFTMMU\/d/a\\
+\\  -e '/CONFIG_AVATAR/d' \\\\
+" "$POISON_SCRIPT"
+    else
+        sed -i "/CONFIG_SOFTMMU\/d/a\\
+\\  -e '/CONFIG_AVATAR/d' \\\\
+" "$POISON_SCRIPT"
+    fi
+fi
 
 echo "[apply.sh] applying mainline-hook patches"
-for p in "$OVERLAY_DIR"/patches/*.patch; do
+for p in "$VARIANT_DIR"/patches/*.patch; do
     [ -e "$p" ] || continue   # empty patches/ dir is fine
     echo "  -> $(basename "$p")"
-    ( cd "$QEMU_SRC" && git apply --check "$p" 2>&1 ) || {
-        echo "[apply.sh] patch did not apply cleanly: $p" >&2
-        echo "[apply.sh] this usually means the upstream QEMU version" >&2
-        echo "[apply.sh] is too new (or too old) for this patch. The" >&2
-        echo "[apply.sh] failure context above shows which mainline" >&2
-        echo "[apply.sh] file shifted — typically a 3-way merge fixes" >&2
-        echo "[apply.sh] it. Verified clean against QEMU v6.2.0." >&2
-        exit 1
-    }
-    ( cd "$QEMU_SRC" && git apply "$p" )
+    # Try strict `git apply` first; if context shifted (e.g. a newer
+    # point release added a line nearby), fall back to GNU `patch` with
+    # fuzz 3. This trades strictness for the ability to absorb minor
+    # upstream churn between point releases without forking the patch.
+    if ( cd "$QEMU_SRC" && git apply --check "$p" >/dev/null 2>&1 ); then
+        ( cd "$QEMU_SRC" && git apply "$p" )
+    else
+        echo "    (git apply rejected; falling back to patch -N -F3)"
+        # `patch -N` skips hunks already merged upstream (matters when
+        # the same overlay covers multiple QEMU point/major releases —
+        # e.g. v10.0.3 + v11.0.0 where v11 picked up one of our hunks
+        # natively). Apple/BSD patch also prompts "Assume -R?" with
+        # default yes on EOF, which would silently *un-install* the
+        # upstream version of the hunk; `yes n |` answers no. Reading
+        # via `-i` frees stdin for that.
+        #
+        # patch exits 1 whenever any hunk is skipped — even when -N
+        # treats the skip as "already applied, fine". So we can't
+        # trust the exit code, and a leftover .rej file can be either
+        # a genuine rejection OR the saved copy of an
+        # already-applied-skipped hunk. We distinguish via patch's own
+        # stdout: "hunks FAILED" / "FAILED at" indicate a real miss,
+        # while "Ignoring previously applied" + .rej is just the
+        # already-applied case and the target file is already at the
+        # goal state.
+        log=$(mktemp)
+        ( cd "$QEMU_SRC" && yes n 2>/dev/null \
+            | patch -p1 -N -F3 -i "$p" 2>&1 ) > "$log" || true
+        if grep -qiE 'hunks? failed|failed at' "$log"; then
+            echo "[apply.sh] patch did not apply cleanly: $p" >&2
+            cat "$log" >&2
+            find "$QEMU_SRC" -name '*.rej' -print -exec cat {} \; >&2
+            find "$QEMU_SRC" \( -name '*.rej' -o -name '*.orig' \) -delete
+            rm -f "$log"
+            echo "[apply.sh] the upstream QEMU version may be too new" >&2
+            echo "[apply.sh] (or too old) for this variant — try a" >&2
+            echo "[apply.sh] different variant subdir, or refresh." >&2
+            exit 1
+        fi
+        # No real failures — print a one-line summary of what got
+        # skipped so the log makes it obvious what's redundant.
+        grep -E 'Ignoring previously applied|previously reversed' "$log" \
+            | sed 's/^/    /' || true
+        find "$QEMU_SRC" \( -name '*.rej' -o -name '*.orig' \) -delete
+        rm -f "$log"
+    fi
 done
 
 echo "[apply.sh] overlay applied"
 echo "          source tree is now ready: cd <build-dir> &&"
 echo "          $QEMU_SRC/configure --target-list=arm-softmmu \\"
-echo "              --disable-werror --disable-bpf --disable-linux-io-uring"
+echo "              --disable-werror --disable-bpf --disable-linux-io-uring \\"
+echo "              --enable-avatar"
