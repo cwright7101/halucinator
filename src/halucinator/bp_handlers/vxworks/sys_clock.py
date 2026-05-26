@@ -95,12 +95,14 @@ class ClockTickStarter(BPHandler):
 
     def __init__(self, irq_num: int, name: str = 'sysClk',
                  rate: float = 0.1, delay: int = 0,
-                 skip_real: bool = False) -> None:
+                 skip_real: bool = False,
+                 unmask_arm_irqs: bool = False) -> None:
         self.irq_num = irq_num
         self.name = name
         self.rate = rate
         self.delay = delay
         self.skip_real = skip_real
+        self.unmask_arm_irqs = unmask_arm_irqs
         self.model: Type[TimerModel] = TimerModel
         self._started = False
 
@@ -113,6 +115,24 @@ class ClockTickStarter(BPHandler):
                       self.name, self.rate, self.irq_num)
             self.model.start_timer(self.name, self.irq_num, self.rate,
                                    self.delay)
+            # On ARM the reset stub leaves CPSR.I=1 (IRQs masked). When the
+            # kernel scheduler enters multitasking it normally restores CPSR
+            # from the first task's saved state with I=0. When skip_real
+            # bypasses the scheduler body, that restoration never happens
+            # and the synthesised arm_vic ticks are suppressed by
+            # ArmVicController.deliver()'s CPSR.I check. unmask_arm_irqs
+            # models the missing CPSR restore: clear bit 7 so subsequent
+            # ticks actually deliver.
+            if self.unmask_arm_irqs:
+                try:
+                    cpsr = qemu.read_register('cpsr')
+                    qemu.write_register('cpsr', cpsr & ~0x80)
+                    hlog.info('ClockTickStarter: cleared CPSR.I '
+                              '(0x%08x -> 0x%08x)',
+                              cpsr, cpsr & ~0x80)
+                except Exception as _e:  # noqa: BLE001
+                    hlog.error('ClockTickStarter: unmask_arm_irqs failed: %s',
+                               _e)
         # skip_real=true: synthesize a SkipFunc-style return after the
         # tick is armed. Use this when the hooked function (typically the
         # kernel scheduler) cannot run cleanly without fully-initialised
