@@ -16,8 +16,14 @@ import argparse
 import signal
 from typing import TYPE_CHECKING, Any, List, Optional, Tuple, Union
 
-from avatar2 import Avatar
-from avatar2.peripherals.avatar_peripheral import AvatarPeripheral
+# avatar2 is imported lazily (inside the functions that build/inspect
+# avatar2 objects) rather than at module load. The pluggable-backend
+# refactor means the unicorn/ghidra/renode paths don't touch avatar2 at
+# all, and avatar2 drags in a native keystone-engine that isn't
+# available on every host (e.g. Apple Silicon). Keeping the import lazy
+# lets those backends run on hosts where avatar2 can't even import.
+# Type annotations still reference Avatar/AvatarPeripheral as strings
+# thanks to `from __future__ import annotations` above.
 from .peripheral_models import generic as peripheral_emulators
 
 from .bp_handlers import intercepts
@@ -59,6 +65,7 @@ def get_qemu_target(
     # Get info from config
     avatar_arch = config.machine.get_avatar_arch()
 
+    from avatar2 import Avatar
     avatar = Avatar(arch=avatar_arch, output_directory=outdir)
     avatar.config = config
     avatar.cpu_model = config.machine.cpu_model
@@ -207,6 +214,7 @@ def register_intercepts(config: Any, avatar: Avatar, qemu: Any) -> None:
     """
     Create and registers the intercepts, must be called after avatar.init_targets()
     """
+    from avatar2.peripherals.avatar_peripheral import AvatarPeripheral
     # Instantiate the BP Handler Classes
     added_classes = []
     for intercept in config.intercepts:
@@ -478,6 +486,7 @@ def _preregister_avatar_peripherals(config: Any, avatar: Avatar) -> List[AvatarP
     subclass, and register a forwarded memory range for it. Must run
     before the QEMU config JSON is generated so avatar-rmemory regions
     land in the config file."""
+    from avatar2.peripherals.avatar_peripheral import AvatarPeripheral
     added: List[AvatarPeripheral] = []
     for intercept in config.intercepts:
         bp_cls = intercepts.get_bp_handler(intercept)
