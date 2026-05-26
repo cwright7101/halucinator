@@ -14,6 +14,7 @@ from halucinator.backends.irq import (
     build_irq_controller,
     default_for_arch,
 )
+from halucinator.backends.irq.arm_vic import ArmVicController
 from halucinator.backends.irq.cortex_m import CortexMController
 from halucinator.backends.irq.gic import GicController
 from halucinator.backends.irq.mips import MipsController
@@ -27,16 +28,27 @@ class _FakeBackend:
         self.writes: list[tuple[int, int, int]] = []
         self.reg_reads: dict[str, int] = {}
         self.reg_writes: list[tuple[str, int]] = []
+        self.mem: dict[int, int] = {}   # addr -> word (for read_memory)
 
     def write_memory(self, addr, size, value, num_words=1, raw=False):
         self.writes.append((addr, size, value))
         return True
+
+    def read_memory(self, addr, size, num_words=1, raw=False):
+        return self.mem.get(addr, 0)
 
     def read_register(self, name):
         return self.reg_reads.get(name, 0)
 
     def write_register(self, name, value):
         self.reg_writes.append((name, value))
+
+    # Helper: last value written to a register.
+    def last_reg(self, name):
+        for n, v in reversed(self.reg_writes):
+            if n == name:
+                return v
+        return None
 
 
 # ---------------------------------------------------------------------------
@@ -222,6 +234,121 @@ class TestOpenPic:
             OpenPicController(openpic_base=self.BASE).trigger(
                 _FakeBackend(), 256,
             )
+
+
+# ---------------------------------------------------------------------------
+# ArmVicController (synthesised A-profile ARM IRQ delivery)
+# ---------------------------------------------------------------------------
+
+class TestArmVic:
+    # CPSR in SVC mode (0x13), IRQs enabled (I=0).
+    CPSR_SVC = 0x13
+
+    def test_factory_arm_vic(self):
+        c = build_irq_controller(
+            "arm", IrqControllerSpec(type="arm_vic"),
+        )
+        assert isinstance(c, ArmVicController)
+        assert c.vector_base == 0x0
+
+    def test_factory_vic_alias(self):
+        c = build_irq_controller(
+            "arm",
+            IrqControllerSpec(type="vic",
+                              options={"vector_base": 0xFFFF0000}),
+        )
+        assert isinstance(c, ArmVicController)
+        assert c.vector_base == 0xFFFF0000
+
+    def test_factory_passes_options(self):
+        c = build_irq_controller(
+            "arm",
+            IrqControllerSpec(type="arm_vic",
+                              options={"isr_addr": 0x20001234,
+                                       "irq_simple_entry": 0x20005678}),
+        )
+        assert c.isr_addr == 0x20001234
+        assert c.irq_simple_entry == 0x20005678
+
+    def test_trigger_queues_only(self):
+        # trigger must NOT mutate CPU state — it only enqueues.
+        class _Q:
+            _pending_irqs: list = []
+        q = _Q()
+        ArmVicController().trigger(q, 7)
+        assert q._pending_irqs == [7]
+
+    def test_deliver_vectors_at_0x18_by_default(self):
+        fb = _FakeBackend()
+        fb.reg_reads["cpsr"] = self.CPSR_SVC
+        fb.reg_reads["pc"] = 0x20010000
+        ok = ArmVicController(vector_base=0x0).deliver(fb, 3)
+        assert ok is True
+        # PC set to the IRQ vector (vector_base + 0x18).
+        assert fb.last_reg("pc") == 0x18
+        # LR_irq = interrupted PC + 4.
+        assert fb.last_reg("lr") == 0x20010004
+        # SPSR_irq = pre-exception CPSR.
+        assert fb.last_reg("spsr") == self.CPSR_SVC
+        # CPSR switched to IRQ mode (0x12) with I bit set, T cleared.
+        cpsr = next(v for n, v in fb.reg_writes if n == "cpsr")
+        assert (cpsr & 0x1F) == 0x12
+        assert (cpsr & 0x80) != 0       # I set
+        assert (cpsr & 0x20) == 0       # T clear (ARM state)
+
+    def test_deliver_high_vectors(self):
+        fb = _FakeBackend()
+        fb.reg_reads["cpsr"] = self.CPSR_SVC
+        fb.reg_reads["pc"] = 0x20010000
+        ArmVicController(vector_base=0xFFFF0000).deliver(fb, 0)
+        assert fb.last_reg("pc") == 0xFFFF0018
+
+    def test_deliver_dropped_when_masked(self):
+        fb = _FakeBackend()
+        fb.reg_reads["cpsr"] = self.CPSR_SVC | 0x80   # I bit set
+        fb.reg_reads["pc"] = 0x20010000
+        ok = ArmVicController().deliver(fb, 1)
+        assert ok is False
+        # Nothing mutated.
+        assert fb.reg_writes == []
+
+    def test_deliver_direct_isr_when_no_vector_installed(self):
+        # vector slot at 0x18 reads 0 -> firmware hasn't installed
+        # vectors -> vector straight at the configured isr_addr.
+        fb = _FakeBackend()
+        fb.reg_reads["cpsr"] = self.CPSR_SVC
+        fb.reg_reads["pc"] = 0x20010000
+        fb.mem[0x18] = 0   # no vector installed
+        c = ArmVicController(vector_base=0x0, isr_addr=0x20040000)
+        c.deliver(fb, 5)
+        assert fb.last_reg("pc") == 0x20040000
+
+    def test_deliver_uses_vector_when_installed(self):
+        # vector slot non-zero -> use the architectural vector at 0x18.
+        fb = _FakeBackend()
+        fb.reg_reads["cpsr"] = self.CPSR_SVC
+        fb.reg_reads["pc"] = 0x20010000
+        fb.mem[0x18] = 0xE59FF018   # ldr pc,[pc,#0x18] — vector present
+        c = ArmVicController(vector_base=0x0, isr_addr=0x20040000)
+        c.deliver(fb, 5)
+        assert fb.last_reg("pc") == 0x18
+
+    def test_irq_simple_entry_wins(self):
+        fb = _FakeBackend()
+        fb.reg_reads["cpsr"] = self.CPSR_SVC
+        fb.reg_reads["pc"] = 0x20010000
+        c = ArmVicController(vector_base=0x0, isr_addr=0x20040000,
+                             irq_simple_entry=0x20099000)
+        c.deliver(fb, 5)
+        assert fb.last_reg("pc") == 0x20099000
+
+    def test_register_clock_isr_only_fills_unset(self):
+        c = ArmVicController(isr_addr=0x20001000)
+        c.register_clock_isr(0x20009999)  # explicit config wins
+        assert c.isr_addr == 0x20001000
+        c2 = ArmVicController()
+        c2.register_clock_isr(0x20009999)
+        assert c2.isr_addr == 0x20009999
 
 
 # ---------------------------------------------------------------------------
