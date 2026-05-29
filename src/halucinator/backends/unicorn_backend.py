@@ -339,6 +339,11 @@ class UnicornBackend(ARMHalMixin, HalBackend):
 
     def init(self) -> None:
         """Initialise unicorn engine and map all registered memory regions."""
+        # Hoisted: `_os` is referenced unconditionally below (HAL_TRACK_READS,
+        # HAL_SP_WATCH, HAL_PC_SAMPLE, HAL_CALL_TRACE, HAL_MAP_UNMAPPED). The
+        # later `import os as _os` statements are kept as harmless re-imports
+        # but this one is what Python's local-binding rule actually needs.
+        import os as _os
         info = _ARCH_MAP.get(self.arch_name)
         if info is None:
             raise ValueError(
