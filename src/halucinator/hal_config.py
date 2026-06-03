@@ -83,7 +83,14 @@ class HalInterceptConfig:
         class_str = split_str[-1]
         try:
             module = importlib.import_module(module_str)
-        except ImportError:
+        except Exception:  # noqa: BLE001
+            # A handler module that can't be imported — for ANY reason —
+            # makes the intercept invalid. Catch broadly, not just
+            # ImportError: when pyghidra/JPype is loaded it installs a
+            # meta-path import hook that raises a Java exception (not an
+            # ImportError) for names it treats as Java packages, e.g. a
+            # bogus class string like "cls.Class". Letting that propagate
+            # turned is_valid() into a crash instead of a False return.
             hal_log.error("No module %s on Intercept %s", module_str, self)
             return False
 
@@ -155,6 +162,7 @@ class HALMachineConfig:
         gdb_arch: Optional[str] = None,
         machine: Optional[str] = None,
         interrupt_controller: Optional[Dict[str, Any]] = None,
+        irq_delivery: Optional[Dict[str, Any]] = None,
     ) -> None:  # pylint: disable=too-many-arguments
         self.arch = arch
         self.machine = machine
@@ -165,6 +173,11 @@ class HALMachineConfig:
         self.gdb_arch = gdb_arch
         self.vector_base = vector_base
         self.config_file = config_file
+        # Keep the raw controller dict so the irq_delivery back-compat
+        # shim can recover firmware/synth fields that the IrqControllerSpec
+        # folds into `options`.
+        self._interrupt_controller_raw = interrupt_controller
+        self._irq_delivery_raw = irq_delivery
         self.interrupt_controller = self._parse_irq_spec(interrupt_controller)
         self.using_default_machine: bool = config_file is None
         self._using_default_machine: bool = self.using_default_machine  # private alias
@@ -229,6 +242,36 @@ class HALMachineConfig:
         """
         from halucinator.backends.irq import build_irq_controller
         return build_irq_controller(self.arch, self.interrupt_controller)
+
+    def build_delivery_plan(self) -> Optional[Any]:
+        """Construct the CPU-exception DeliveryPlan for in-process
+        backends (Unicorn/Ghidra), or None when the backend's CPU model
+        takes exceptions natively (QEMU/avatar2) and no plan is needed.
+
+        Resolution order:
+          1. An explicit `machine.irq_delivery` block — the new shape.
+          2. Back-compat: derive a plan from firmware/synth fields left
+             on the old `interrupt_controller` block, with a one-time
+             deprecation warning pointing at the new shape.
+          3. None — a purely-hardware controller; nothing to deliver.
+        """
+        from halucinator.backends.irq.delivery import DeliveryPlan
+
+        if self._irq_delivery_raw is not None:
+            return DeliveryPlan.from_block(self._irq_delivery_raw)
+
+        plan = DeliveryPlan.from_legacy_controller(
+            self._interrupt_controller_raw or {}
+        )
+        if plan is not None:
+            hal_log.warning(
+                "machine.interrupt_controller carries delivery fields "
+                "(isr_addr/irq_simple_entry/irq_fired_addr/…). These are "
+                "deprecated there; move them into a `machine.irq_delivery` "
+                "block (model: %s). Auto-deriving for now.",
+                plan.model.value,
+            )
+        return plan
 
     def get_avatar_arch(self) -> Any:
         """

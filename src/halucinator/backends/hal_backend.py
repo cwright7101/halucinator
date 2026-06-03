@@ -153,6 +153,17 @@ class HalBackend(ABC):
         the backend is constructed and the YAML config has been parsed."""
         self._irq_controller = controller
 
+    def set_delivery_plan(self, plan: Any) -> None:
+        """Attach the CPU-exception DeliveryPlan (the 'where-to-land'
+        data). Only consulted by in-process backends whose CPU model
+        doesn't take exceptions natively; harmless on QEMU/avatar2."""
+        self._delivery_plan = plan
+
+    def set_exception_deliverer(self, deliverer: Any) -> None:
+        """Attach the per-arch ExceptionDeliverer. Backends that take
+        exceptions natively never read this."""
+        self._exception_deliverer = deliverer
+
     def shutdown(self) -> None:
         """Tear down the backend. Override if cleanup is needed."""
 

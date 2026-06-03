@@ -162,12 +162,19 @@ class ArmVicController(IrqController):
     def deliver(self, backend: "HalBackend", num: int = 0) -> bool:
         """Synthesise the ARM IRQ exception entry. Must run single-threaded.
 
-        Returns True if the entry was set up (PC now at the IRQ vector or
-        the configured ISR), False if suppressed (IRQs masked)."""
-        # Stash the IRQ number on the backend so bp_handlers like
-        # IntLvlVecChkArm (VxWorks xxxIntLvlVecChk) can read it back when
-        # the firmware asks "which IRQ fired?".
-        setattr(backend, "_last_delivered_irq", int(num))
+        Thin legacy wrapper: the exception-entry logic now lives in the
+        shared ``ArmExceptionDeliverer`` (backends/irq/delivery.py). This
+        controller's fields (``vector_base``/``isr_addr``/``irq_simple_entry``)
+        map onto a ``DeliveryPlan`` and delegate, so there is exactly one
+        copy of the ARM IRQ-entry sequence. Kept for configs that wire an
+        ``ArmVicController`` directly (e.g. via ``set_irq_controller`` with
+        no separate delivery plan) and for the ``register_clock_isr``
+        rendezvous below.
+
+        Returns True if the entry was set up, False if suppressed (IRQs
+        masked) — the diagnostic logging is retained here."""
+        from .delivery import (ArmExceptionDeliverer, DeliveryModel,
+                               DeliveryPlan)
         import os as __os
         _dbg = __os.environ.get("HAL_TIMER_DBG")
         if _dbg:
@@ -182,48 +189,19 @@ class ArmVicController(IrqController):
             except Exception:
                 pass
         with self._lock:
-            cpsr = backend.read_register("cpsr")
-            if cpsr & _ARM_CPSR_I:
-                # IRQs masked (CPSR.I=1). The firmware will re-enable;
-                # the next tick lands then. Dropping a masked tick
-                # matches edge-triggered hardware closely enough for a
-                # periodic system clock. The caller (UnicornBackend ARM
-                # path) re-queues so it is retried, see below.
+            model = (DeliveryModel.TRAMPOLINE
+                     if self.irq_simple_entry is not None
+                     else DeliveryModel.FRAME)
+            plan = DeliveryPlan(
+                model=model,
+                vector_base=self.vector_base,
+                isr_addr=self.isr_addr,
+                trampoline=self.irq_simple_entry,
+            )
+            delivered = ArmExceptionDeliverer().deliver(backend, num, plan)
+            if not delivered:
                 log.debug("arm_vic: CPSR.I=1 (IRQs masked) — tick deferred")
-                return False
-
-            pc = backend.read_register("pc")
-
-            # Direct-ISR fallback: the firmware vectors at 0x18 are not
-            # installed yet (rehost hasn't reached excVecInit), so vector
-            # straight at the connected ISR. We still switch to IRQ mode
-            # + bank LR/SPSR so the ISR's normal return restores state.
-            target: Optional[int] = None
-            if self.irq_simple_entry is not None:
-                target = self.irq_simple_entry
-            elif self.isr_addr is not None and not self._vector_installed(backend):
-                target = self.isr_addr
-
-            # Switch CPSR to IRQ mode. Writing CPSR auto-banks SP/LR/SPSR
-            # in unicorn's ARM model.
-            new_cpsr = cpsr & ~(_ARM_MODE_MASK | _ARM_CPSR_T)
-            new_cpsr |= _ARM_MODE_IRQ | _ARM_CPSR_I
-            backend.write_register("cpsr", new_cpsr)
-
-            # Now in the IRQ-banked LR/SPSR. Per the ARM ARM the handler
-            # adjusts LR by -4 before returning (`subs pc, lr, #4`); we
-            # therefore store interrupted-PC + 4 here.
-            backend.write_register("lr", (pc + 4) & 0xFFFFFFFF)
-            backend.write_register("spsr", cpsr)
-
-            if target is None:
-                target = self.vector_base + _IRQ_VECTOR_OFFSET
-
-            backend.write_register("pc", target & 0xFFFFFFFF)
-            hlog.info("arm_vic: delivering IRQ %d -> 0x%08x "
-                      "(interrupted pc=0x%08x, LR_irq=0x%08x)",
-                      num, target, pc, (pc + 4) & 0xFFFFFFFF)
-            return True
+            return delivered
 
     # ------------------------------------------------------------------
     # Helpers

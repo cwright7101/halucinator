@@ -1508,12 +1508,26 @@ class UnicornBackend(ARMHalMixin, HalBackend):
         if self._uc is None:
             return
         if self.arch_name == "arm":
-            # A-profile ARM IRQ delivery. If the configured controller
-            # synthesises the exception itself (ArmVicController, mirroring
-            # the X86PicController model — `deliver()` does the IRQ-mode
-            # vector entry on this dispatch thread), route through it.
-            # Otherwise fall back to the built-in ARMv7-A/GIC entry, which
-            # vectors at VBAR+0x18 and shadows GICC_IAR.
+            # A-profile ARM IRQ delivery. Preferred path: the refactored
+            # ExceptionDeliverer + DeliveryPlan (set via main._wire_irq).
+            # It subsumes both the ArmVicController.deliver synth path and
+            # the built-in _apply_pending_irq_armv7a GIC path (proven
+            # equivalent in test_arm_deliverer_equivalence.py). Only the
+            # FRAME/TRAMPOLINE models are handled by ArmExceptionDeliverer;
+            # SHADOW (ghidra) and the unconfigured case fall through to the
+            # legacy logic below.
+            from halucinator.backends.irq.delivery import DeliveryModel
+            deliverer = getattr(self, "_exception_deliverer", None)
+            plan = getattr(self, "_delivery_plan", None)
+            if (deliverer is not None and plan is not None
+                    and plan.model in (DeliveryModel.FRAME,
+                                       DeliveryModel.TRAMPOLINE)):
+                deliverer.deliver(self, irq_num, plan)
+                return
+            # Legacy: if the configured controller synthesises the
+            # exception itself (ArmVicController), route through it;
+            # otherwise the built-in ARMv7-A/GIC entry (VBAR+0x18 +
+            # GICC_IAR shadow).
             ctrl = getattr(self, "_irq_controller", None)
             if ctrl is not None and hasattr(ctrl, "deliver"):
                 # deliver() returns False when CPSR.I masks IRQs — like the
@@ -1595,183 +1609,93 @@ class UnicornBackend(ARMHalMixin, HalBackend):
     _ARM_CPSR_T    = 0x20   # Thumb
 
     def _apply_pending_irq_armv7a(self, irq_num: int) -> None:
-        """Synthesise an ARMv7-A IRQ exception entry.
+        """Synthesise an ARMv7-A IRQ exception entry (legacy GIC path).
 
-        Per ARMv7-A architecture (B1.8.3 Exception entry):
-          R14_irq  = PC (return + correction)
-          SPSR_irq = CPSR
-          CPSR.M   = 0b10010 (IRQ mode)
-          CPSR.I   = 1        (mask further IRQs)
-          CPSR.T   = 0        (ARM state)
-          PC       = vbar + 0x18
-
-        The IRQ exception's standard return-address correction is
-        ``LR -= 4`` in the handler before ``subs pc, lr, #4``. Our
-        firmware's _irq_entry stub does exactly this; we therefore
-        pass the *next* instruction's PC into LR_irq. The ISR's
-        ``movs pc, lr`` then restores CPSR from SPSR_irq and resumes.
+        Thin wrapper over the shared ``ArmExceptionDeliverer``: builds a
+        FRAME ``DeliveryPlan`` from the vector base (``_vtor``) and the
+        configured GIC's ``gicc_base`` (for the GICC_IAR shadow), then
+        delegates. The only behaviour this wrapper adds over the deliverer
+        is the legacy *masked-IRQ re-queue*: when delivery is suppressed
+        (CPSR.I=1) it re-queues the tick and stops the run so the firmware
+        can unmask, rather than dropping it (the ArmVicController path
+        drops). That policy difference is intentionally preserved here.
         """
-        # Snapshot pre-IRQ state.
-        cpsr = self.read_register("cpsr")
-        if cpsr & self._ARM_CPSR_I:
-            # IRQs masked — re-queue and let the firmware unmask
-            # itself; otherwise we'd nest exceptions.
+        from halucinator.backends.irq.delivery import (
+            ArmExceptionDeliverer, DeliveryModel, DeliveryPlan)
+        ctrl = getattr(self, "_irq_controller", None)
+        gicc_base = getattr(ctrl, "gicc_base", None) if ctrl else None
+        vbar = getattr(self, "_vtor", 0)
+        plan = DeliveryPlan(model=DeliveryModel.FRAME, vector_base=vbar,
+                            gicc_base=gicc_base)
+        delivered = ArmExceptionDeliverer().deliver(self, irq_num, plan)
+        if not delivered:
+            # IRQs masked — re-queue and let the firmware unmask itself;
+            # otherwise we'd nest exceptions.
             self._pending_irqs.insert(0, irq_num)
             self._uc.emu_stop()
             return
-        pc = self.read_register("pc")
-        # The next-instruction PC. ARMv7-A IRQ entry sets LR_irq to
-        # PC+4 in ARM state; the handler then subtracts 4 to get back
-        # to the interrupted instruction.
-        return_pc = pc + 4
+        log.info("inject_irq(%d): ARMv7-A entry @ 0x%x", irq_num, vbar + 0x18)
 
-        # Switch CPSR to IRQ mode. Writing CPSR auto-banks SP/LR/SPSR.
-        new_cpsr = cpsr & ~(self._ARM_MODE_MASK | self._ARM_CPSR_T)
-        new_cpsr |= self._ARM_MODE_IRQ | self._ARM_CPSR_I
-        self.write_register("cpsr", new_cpsr)
-
-        # Now in IRQ-banked LR/SPSR.
-        self.write_register("lr", return_pc)
-        self.write_register("spsr", cpsr)
-
-        # Stash the acknowledged IRQ ID into GICC_IAR if the
-        # configured GicController carries a gicc_base. Real GIC
-        # hardware exposes this via the CPU interface; without a
-        # hardware model the firmware's MMIO read otherwise comes
-        # back as zero-initialised memory.
+    def _resolve_delivery_plan(self, build_legacy):
+        """Return the attached DeliveryPlan (new `irq_delivery` config) or,
+        when none was set, a plan built from the legacy controller fields
+        via ``build_legacy(ctrl)``. Centralises the new-vs-legacy choice so
+        each per-arch wrapper stays a one-liner."""
+        plan = getattr(self, "_delivery_plan", None)
+        if plan is not None:
+            return plan
         ctrl = getattr(self, "_irq_controller", None)
-        gicc_base = getattr(ctrl, "gicc_base", None) if ctrl else None
-        if gicc_base is not None:
-            try:
-                self._uc.mem_write(
-                    gicc_base + 0x0C,
-                    int(irq_num).to_bytes(4, "little"),
-                )
-            except Exception:  # noqa: BLE001
-                pass
-
-        vbar = getattr(self, "_vtor", 0)
-        self.write_register("pc", vbar + 0x18)
-        log.info("inject_irq(%d): ARMv7-A entry @ 0x%x, return=0x%x",
-                 irq_num, vbar + 0x18, return_pc)
+        return build_legacy(ctrl)
 
     def _apply_pending_irq_arm64(self, irq_num: int) -> None:
-        """Synthesise an AArch64 IRQ entry for in-process unicorn.
+        """AArch64 IRQ entry — thin wrapper over Arm64ExceptionDeliverer."""
+        from halucinator.backends.irq.delivery import (
+            Arm64ExceptionDeliverer, DeliveryModel, DeliveryPlan)
 
-        Unicorn's ARM64 model doesn't fully implement EL1 vector
-        delivery + ERET. Instead, the firmware exposes a plain
-        ``_irq_entry_simple`` trampoline that follows AAPCS: receives
-        LR = interrupted PC, calls IRQ_Handler, returns via plain
-        ``ret``. The IrqController carries the trampoline address
-        as ``irq_simple_entry``; if that's not set we fall back to
-        VBAR_EL1 + 0x280 which assumes a real CPU exception model.
-        """
-        ctrl = getattr(self, "_irq_controller", None)
-        gicc_base = getattr(ctrl, "gicc_base", None) if ctrl else None
-        irq_simple = (getattr(ctrl, "irq_simple_entry", None)
-                      if ctrl else None)
-
-        # Stash the IRQ ID into GICC_IAR shadow.
-        if gicc_base is not None:
-            try:
-                self._uc.mem_write(
-                    gicc_base + 0x0C,
-                    int(irq_num).to_bytes(4, "little"),
-                )
-            except Exception:  # noqa: BLE001
-                pass
-
-        if irq_simple is not None:
-            # AAPCS-style trampoline: LR = return PC, jump to entry.
-            return_pc = self.read_register("pc")
-            self.write_register("lr", return_pc)
-            self.write_register("pc", int(irq_simple))
-            log.info(
-                "inject_irq(%d): AArch64 trampoline @ 0x%x, return=0x%x",
-                irq_num, irq_simple, return_pc,
+        def _legacy(ctrl):
+            simple = getattr(ctrl, "irq_simple_entry", None) if ctrl else None
+            return DeliveryPlan(
+                model=(DeliveryModel.TRAMPOLINE if simple is not None
+                       else DeliveryModel.FRAME),
+                vector_base=getattr(self, "_vtor", 0),
+                trampoline=simple,
+                gicc_base=getattr(ctrl, "gicc_base", None) if ctrl else None,
             )
-            return
-
-        # Fallback: try the real-CPU vector path. Unlikely to work
-        # under unicorn but keep it as a documented hook.
-        try:
-            vbar = self.read_register("vbar_el1")
-        except Exception:  # noqa: BLE001
-            vbar = getattr(self, "_vtor", 0)
-        return_pc = self.read_register("pc")
-        try:
-            self.write_register("elr_el1", return_pc)
-        except Exception:  # noqa: BLE001
-            pass
-        self.write_register("pc", vbar + 0x280)
-        log.warning(
-            "inject_irq(%d): AArch64 vector entry at 0x%x — Unicorn "
-            "may not honour ERET on return", irq_num, vbar + 0x280,
-        )
+        Arm64ExceptionDeliverer().deliver(self, irq_num,
+                                          self._resolve_delivery_plan(_legacy))
 
     def _apply_pending_irq_mips(self, irq_num: int) -> None:
-        """Deliver a MIPS IRQ to the running firmware.
+        """MIPS IRQ delivery — thin wrapper over ShadowExceptionDeliverer.
 
-        Unicorn's MIPS model doesn't take CP0 exceptions via the
-        EBase + 0x180 vector, and several variants of synthetic
-        function-call trampolines proved unreliable across
-        emu_start re-entry. Instead, write the post-ack state
-        (irq_fired flag + irq_number) directly to the firmware's
-        well-known globals; main's polling loop sees the change on
-        its next iteration with no ISR ever running. The
-        IrqController carries the global addresses as
-        ``irq_fired_addr`` / ``irq_number_addr``.
-        """
-        ctrl = getattr(self, "_irq_controller", None)
-        if ctrl is None:
-            return
-        irq_number_addr = getattr(ctrl, "irq_number_addr", None)
-        irq_fired_addr = getattr(ctrl, "irq_fired_addr", None)
-        if irq_number_addr is None or irq_fired_addr is None:
-            log.warning(
-                "inject_irq(%d): mips controller has no "
-                "irq_fired_addr/irq_number_addr — IRQ will not be "
-                "delivered to the firmware", irq_num)
-            return
-        try:
-            self._uc.mem_write(int(irq_number_addr),
-                               int(irq_num).to_bytes(4, "big"))
-            self._uc.mem_write(int(irq_fired_addr),
-                               (1).to_bytes(4, "big"))
-            log.info("inject_irq(%d): MIPS shadow write -> "
-                     "irq_number@0x%x irq_fired@0x%x",
-                     irq_num, irq_number_addr, irq_fired_addr)
-        except Exception as exc:  # noqa: BLE001
-            log.warning("inject_irq(%d): MIPS shadow write failed: %r",
-                        irq_num, exc)
+        Unicorn's MIPS model doesn't take CP0 exceptions reliably, so the
+        shadow deliverer writes the firmware's post-ack globals directly."""
+        from halucinator.backends.irq.delivery import (
+            DeliveryModel, DeliveryPlan, ShadowExceptionDeliverer)
+
+        def _legacy(ctrl):
+            return DeliveryPlan(
+                model=DeliveryModel.SHADOW,
+                irq_fired_addr=getattr(ctrl, "irq_fired_addr", None) if ctrl else None,
+                irq_number_addr=getattr(ctrl, "irq_number_addr", None) if ctrl else None,
+            )
+        ShadowExceptionDeliverer().deliver(self, irq_num,
+                                           self._resolve_delivery_plan(_legacy))
 
     def _apply_pending_irq_ppc(self, irq_num: int) -> None:
-        """Deliver a PowerPC IRQ to the running firmware via shadow
-        write — same pattern as MIPS. Unicorn doesn't model the
-        OpenPIC and PPC exception entry through SRR0/SRR1 reliably
-        for our use-case."""
-        ctrl = getattr(self, "_irq_controller", None)
-        if ctrl is None:
-            return
-        irq_number_addr = getattr(ctrl, "irq_number_addr", None)
-        irq_fired_addr = getattr(ctrl, "irq_fired_addr", None)
-        if irq_number_addr is None or irq_fired_addr is None:
-            log.warning(
-                "inject_irq(%d): ppc controller has no "
-                "irq_fired_addr/irq_number_addr — IRQ will not be "
-                "delivered to the firmware", irq_num)
-            return
-        try:
-            self._uc.mem_write(int(irq_number_addr),
-                               int(irq_num).to_bytes(4, "big"))
-            self._uc.mem_write(int(irq_fired_addr),
-                               (1).to_bytes(4, "big"))
-            log.info("inject_irq(%d): PPC shadow write -> "
-                     "irq_number@0x%x irq_fired@0x%x",
-                     irq_num, irq_number_addr, irq_fired_addr)
-        except Exception as exc:  # noqa: BLE001
-            log.warning("inject_irq(%d): PPC shadow write failed: %r",
-                        irq_num, exc)
+        """PowerPC IRQ delivery — thin wrapper over ShadowExceptionDeliverer
+        (same SHADOW pattern as MIPS; Unicorn doesn't model the OpenPIC /
+        SRR0/SRR1 entry reliably for our use-case)."""
+        from halucinator.backends.irq.delivery import (
+            DeliveryModel, DeliveryPlan, ShadowExceptionDeliverer)
+
+        def _legacy(ctrl):
+            return DeliveryPlan(
+                model=DeliveryModel.SHADOW,
+                irq_fired_addr=getattr(ctrl, "irq_fired_addr", None) if ctrl else None,
+                irq_number_addr=getattr(ctrl, "irq_number_addr", None) if ctrl else None,
+            )
+        ShadowExceptionDeliverer().deliver(self, irq_num,
+                                           self._resolve_delivery_plan(_legacy))
 
     def _maybe_handle_exc_return(self, addr: int) -> bool:
         """Called from the invalid-fetch hook. If the fetch address looks

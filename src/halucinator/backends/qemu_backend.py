@@ -593,20 +593,41 @@ class _GDBClient:
 # ---------------------------------------------------------------------------
 
 class _QMPClient:
-    """Minimal QEMU Machine Protocol (QMP) client over a TCP socket."""
+    """Minimal QEMU Machine Protocol (QMP) client.
 
-    def __init__(self, host: str = "localhost", port: int = 4444):
+    Speaks QMP over either a Unix domain socket (``unix_path``) or a TCP
+    socket (``host``/``port``). A Unix socket is strongly preferred for the
+    halucinator inject_irq hot path: every interrupt is a QMP request →
+    reply round-trip, and a Unix socket avoids the loopback TCP/IP stack
+    (no Nagle, no checksums, no port). When TCP is used we at least disable
+    Nagle so the tiny request/response messages aren't delayed.
+    """
+
+    def __init__(self, host: str = "localhost", port: int = 4444,
+                 unix_path: Optional[str] = None):
         self.host = host
         self.port = port
+        self.unix_path = unix_path
         self._sock: Optional[socket.socket] = None
+        self._buf: bytes = b""
         self._lock = threading.Lock()
 
     def connect(self) -> None:
-        self._sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self._sock.settimeout(5.0)
-        self._sock.connect((self.host, self.port))
+        if self.unix_path:
+            sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+            sock.settimeout(5.0)
+            sock.connect(self.unix_path)
+        else:
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.settimeout(5.0)
+            sock.connect((self.host, self.port))
+            # Tiny QMP request/response messages — don't let Nagle coalesce
+            # and delay them.
+            sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+        self._sock = sock
+        self._buf = b""
         # Read the greeting
-        greeting = self._recv_line()
+        self._recv_line()
         # Negotiate capabilities
         self._send({"execute": "qmp_capabilities"})
         self._recv_line()  # OK response
@@ -618,6 +639,7 @@ class _QMPClient:
             except OSError:
                 pass
             self._sock = None
+        self._buf = b""
 
     def _send(self, obj: Dict) -> None:
         data = (json.dumps(obj) + "\n").encode()
@@ -625,13 +647,15 @@ class _QMPClient:
             self._sock.sendall(data)
 
     def _recv_line(self) -> Dict:
-        buf = b""
-        while True:
-            ch = self._sock.recv(1)
-            if not ch or ch == b"\n":
+        # Buffered line read: pull in chunks and split on newlines, instead
+        # of one recv() syscall per byte (which dominated the old TCP path).
+        while b"\n" not in self._buf:
+            chunk = self._sock.recv(4096)
+            if not chunk:
                 break
-            buf += ch
-        return json.loads(buf) if buf else {}
+            self._buf += chunk
+        line, _sep, self._buf = self._buf.partition(b"\n")
+        return json.loads(line) if line else {}
 
     def execute(self, command: str, arguments: Optional[Dict] = None) -> Dict:
         msg: Dict = {"execute": command}
@@ -671,14 +695,18 @@ class QEMUBackend(ARM32HalMixin, HalBackend):
         gdb_port: int = 1234,
         qmp_host: str = "localhost",
         qmp_port: int = 4444,
+        qmp_unix_socket: Optional[str] = None,
         **kwargs: Any,
     ):
         self.config = config
         self.arch = arch
         self.qemu_path = qemu_path
         self.qemu_args = qemu_args or []
+        self.qmp_unix_socket = qmp_unix_socket
         self._gdb = _GDBClient(gdb_host, gdb_port, arch=arch)
-        self._qmp = _QMPClient(qmp_host, qmp_port)
+        # Prefer a Unix domain socket for QMP (much faster inject_irq
+        # round-trips); fall back to TCP when no socket path is given.
+        self._qmp = _QMPClient(qmp_host, qmp_port, unix_path=qmp_unix_socket)
         self._process: Optional[subprocess.Popen] = None
         self._bp_map: Dict[int, int] = {}   # bp_id → addr
         self._next_bp_id = 1
@@ -705,10 +733,15 @@ class QEMUBackend(ARM32HalMixin, HalBackend):
     def launch(self) -> None:
         """Start QEMU and connect GDB + QMP."""
         if self.qemu_path:
+            if self.qmp_unix_socket:
+                qmp_arg = f"-qmp unix:{self.qmp_unix_socket},server,nowait"
+            else:
+                qmp_arg = (f"-qmp tcp:{self._qmp.host}:{self._qmp.port},"
+                           f"server,nowait")
             cmd = [self.qemu_path] + self.qemu_args + [
                 "-S",  # start stopped
                 f"-gdb tcp::{self._gdb.port}",
-                f"-qmp tcp:{self._qmp.host}:{self._qmp.port},server,nowait",
+                qmp_arg,
             ]
             log.info("Launching QEMU: %s", " ".join(cmd))
             self._process = subprocess.Popen(
