@@ -228,3 +228,27 @@ class TestQEMUBackend:
         b.execute_return(0)
         b._gdb.write_register.assert_any_call("r0", 0)
         b._gdb.write_register.assert_any_call("pc", 0x08001234)
+
+
+class TestInjectIrqGracefulDegradation:
+    """inject_irq against a stock QEMU lacking the avatar IRQ QMP patches
+    should warn once and short-circuit, not silently no-op forever."""
+
+    def test_command_not_found_warns_and_disables(self, backend_with_mocks):
+        b = backend_with_mocks  # arch=cortex-m3 -> avatar-armv7m-inject-irq
+        b._qmp.execute.return_value = {
+            "error": {"class": "CommandNotFound", "desc": "no such command"}}
+        b.inject_irq(5)
+        assert b._qmp.execute.call_count == 1
+        assert getattr(b, "_irq_qmp_unavailable", False) is True
+        # subsequent injects short-circuit — no further QMP round-trips
+        b.inject_irq(6)
+        assert b._qmp.execute.call_count == 1
+
+    def test_success_keeps_injecting(self, backend_with_mocks):
+        b = backend_with_mocks
+        b._qmp.execute.return_value = {"return": {}}
+        b.inject_irq(5)
+        b.inject_irq(6)
+        assert b._qmp.execute.call_count == 2
+        assert getattr(b, "_irq_qmp_unavailable", False) is False

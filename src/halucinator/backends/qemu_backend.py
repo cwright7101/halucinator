@@ -957,6 +957,32 @@ class QEMUBackend(ARM32HalMixin, HalBackend):
     # Optional: IRQ injection via QMP avatar commands
     # ------------------------------------------------------------------
 
+    def _qmp_inject(self, command: str, arguments: Dict) -> Optional[Dict]:
+        """Run an avatar IRQ-injection QMP command, degrading gracefully on
+        a stock QEMU that lacks the avatar-qemu IRQ patches.
+
+        QMP returns ``{"error": {"class": "CommandNotFound", ...}}`` for an
+        unknown command rather than raising. Without this, inject_irq would
+        silently no-op (no IRQ delivered, no signal why). Here we log one
+        clear warning and then short-circuit subsequent calls — the avatar
+        IRQ commands ship together, so if one is missing they all are."""
+        if getattr(self, "_irq_qmp_unavailable", False):
+            return None
+        resp = self._qmp.execute(command, arguments)
+        if isinstance(resp, dict) and "error" in resp:
+            err = resp["error"] if isinstance(resp["error"], dict) else {}
+            if err.get("class") == "CommandNotFound":
+                self._irq_qmp_unavailable = True
+                log.warning(
+                    "QEMU build lacks the avatar IRQ-injection QMP command "
+                    "%r — IRQs will NOT be delivered to the target. Build "
+                    "avatar-qemu with the IRQ patches (halucinator/avatar-qemu"
+                    " PR #5) or use a backend that injects via the "
+                    "IrqController.", command)
+            else:
+                log.warning("inject_irq: QMP %s failed: %r", command, err)
+        return resp
+
     def inject_irq(self, irq_num: int) -> None:
         arch = getattr(self, "arch", None)
         # Cortex-M3 fast-path: avatar-qemu's NVIC-aware QMP command
@@ -964,7 +990,7 @@ class QEMUBackend(ARM32HalMixin, HalBackend):
         # exception offset since the QMP command takes a full
         # Cortex-M exception number.
         if arch == "cortex-m3":
-            self._qmp.execute(
+            self._qmp_inject(
                 "avatar-armv7m-inject-irq",
                 {"num-irq": int(irq_num) + 16, "num-cpu": 0},
             )
@@ -973,7 +999,7 @@ class QEMUBackend(ARM32HalMixin, HalBackend):
         # via avatar-arm-inject-irq. Bypasses the GDB-write_memory
         # GIC_ISPENDR path which can race with the live target.
         if arch in ("arm", "arm64"):
-            self._qmp.execute(
+            self._qmp_inject(
                 "avatar-arm-inject-irq",
                 {"num-irq": int(irq_num), "num-cpu": 0},
             )
@@ -986,14 +1012,14 @@ class QEMUBackend(ARM32HalMixin, HalBackend):
             irq_fired_phys = getattr(ctrl, "irq_fired_phys_addr", None)
             irq_number_phys = getattr(ctrl, "irq_number_phys_addr", None)
             if irq_fired_phys is not None and irq_number_phys is not None:
-                self._qmp.execute(
+                self._qmp_inject(
                     "avatar-shadow-irq",
                     {"number-addr": int(irq_number_phys),
                      "fired-addr":  int(irq_fired_phys),
                      "irq-num":     int(irq_num)},
                 )
                 return
-            self._qmp.execute(
+            self._qmp_inject(
                 "avatar-mips-inject-irq",
                 {"num-irq": int(irq_num), "num-cpu": 0},
             )
@@ -1018,7 +1044,7 @@ class QEMUBackend(ARM32HalMixin, HalBackend):
             irq_fired_addr = getattr(ctrl, "irq_fired_addr", None)
             irq_number_addr = getattr(ctrl, "irq_number_addr", None)
             if irq_fired_addr is not None and irq_number_addr is not None:
-                self._qmp.execute(
+                self._qmp_inject(
                     "avatar-shadow-irq",
                     {"number-addr": int(irq_number_addr),
                      "fired-addr":  int(irq_fired_addr),
@@ -1027,7 +1053,7 @@ class QEMUBackend(ARM32HalMixin, HalBackend):
                 return
             # No shadow-state — fall back to QMP pulse (works only
             # on e500 where the racy pulse happens to land).
-            self._qmp.execute(
+            self._qmp_inject(
                 "avatar-ppc-inject-irq",
                 {"num-irq": 4 if arch != "ppc64" else 5, "num-cpu": 0},
             )
