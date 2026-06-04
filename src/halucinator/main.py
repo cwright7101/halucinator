@@ -92,7 +92,13 @@ def get_qemu_target(
         executable=qemu_path,
         entry_address=config.machine.entry_addr,
         name=name,
-        qmp_unix_socket=f"/tmp/{name}-qmp",
+        # Default gdb + qmp to Unix sockets (faster than loopback TCP);
+        # HALUCINATOR_QEMU_TCP=1 forces TCP. The direct QEMUBackend path
+        # overrides these paths below; the avatar2 path uses them as-is.
+        gdb_unix_socket_path=(None if os.environ.get("HALUCINATOR_QEMU_TCP")
+                              else f"/tmp/{name}-gdb"),
+        qmp_unix_socket=(None if os.environ.get("HALUCINATOR_QEMU_TCP")
+                         else f"/tmp/{name}-qmp"),
     )
 
     if log_basic_blocks == "irq":
@@ -677,12 +683,16 @@ def _emulate_with_qemu_backend(
         target_name, config, log_basic_blocks=log_basic_blocks,
         gdb_port=gdb_port, singlestep=singlestep, qemu_args=qemu_args,
     )
-    # Use a Unix domain socket for QMP — much faster inject_irq round-trips
-    # than loopback TCP. avatar's assemble_cmd_line() emits
-    # `-qmp unix:<path>,server,nowait` when qmp_unix_socket is set, and the
-    # QEMUBackend's _QMPClient connects to the same path below. Keep it in
-    # /tmp to stay under the AF_UNIX path-length limit (~104 chars).
-    qmp_sock_path = f"/tmp/hal-{target_name}-{gdb_port}-qmp.sock"
+    # Default the internal gdb + qmp control channels to Unix domain sockets
+    # (faster than loopback TCP, no delayed-ACK tail latency; we own both
+    # ends). avatar's assemble_cmd_line() emits `-gdb unix:…` / `-qmp unix:…`
+    # when these are set, and the QEMUBackend's _GDBClient/_QMPClient connect
+    # to the same paths below. Set HALUCINATOR_QEMU_TCP=1 to force TCP. Keep
+    # paths in /tmp to stay under the AF_UNIX path-length limit (~104 chars).
+    _force_tcp = bool(os.environ.get("HALUCINATOR_QEMU_TCP"))
+    gdb_sock_path = None if _force_tcp else f"/tmp/hal-{target_name}-{gdb_port}-gdb.sock"
+    qmp_sock_path = None if _force_tcp else f"/tmp/hal-{target_name}-{gdb_port}-qmp.sock"
+    qemu_target.gdb_unix_socket_path = gdb_sock_path
     qemu_target.qmp_unix_socket = qmp_sock_path
     qemu_target.qmp_port = gdb_port + 1
 
@@ -744,6 +754,7 @@ def _emulate_with_qemu_backend(
     )
     backend: "HalBackend" = backend_cls(arch=config.machine.arch, gdb_port=gdb_port,
                           qmp_port=gdb_port + 1,
+                          gdb_unix_socket=gdb_sock_path,
                           qmp_unix_socket=qmp_sock_path)
     backend._process = qemu_proc
     # Give QEMU a moment to open its listening sockets.

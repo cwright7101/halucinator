@@ -137,20 +137,37 @@ class _GDBClient:
     """
 
     def __init__(self, host: str = "localhost", port: int = 1234,
-                 timeout: float = 5.0, arch: str = "arm"):
+                 timeout: float = 5.0, arch: str = "arm",
+                 unix_path: Optional[str] = None):
         self.host = host
         self.port = port
         self.timeout = timeout
         self.arch = arch  # used for fallback register layout
+        self.unix_path = unix_path  # AF_UNIX path; None -> TCP (host/port)
         self._sock: Optional[socket.socket] = None
         self._lock = threading.Lock()
         self._ack_mode: bool = True  # conservative default; turned off if
                                      # QStartNoAckMode is supported
+        # Persistent receive buffer shared by every read site (_recv_pkt,
+        # _drain_socket). Reading the RSP stream one byte per recv() syscall
+        # made each packet cost O(bytes) syscalls — catastrophic for large
+        # register/memory dumps. We now recv() in 4 KiB chunks and frame
+        # packets out of this buffer.
+        self._rxbuf: bytes = b""
 
     def connect(self) -> None:
-        self._sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self._sock.settimeout(self.timeout)
-        self._sock.connect((self.host, self.port))
+        if self.unix_path:
+            self._sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+            self._sock.settimeout(self.timeout)
+            self._sock.connect(self.unix_path)
+        else:
+            self._sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            self._sock.settimeout(self.timeout)
+            self._sock.connect((self.host, self.port))
+            # Tiny request/response packets — disable Nagle so they aren't
+            # delayed waiting to coalesce.
+            self._sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+        self._rxbuf = b""
         # Initial '+' to ACK any startup banner; then negotiate no-ack mode.
         # If the stub doesn't support it (e.g. avatar-qemu's ppc64 stub
         # returns empty), we stay in ACK mode and +-back every packet.
@@ -171,7 +188,9 @@ class _GDBClient:
         self._discover_register_map()
 
     def _drain_socket(self, max_wait: float) -> None:
-        """Read and discard any bytes already in the socket buffer."""
+        """Read and discard any bytes already pending — both the buffered
+        bytes and whatever is still in the kernel socket buffer."""
+        self._rxbuf = b""   # discard anything already framed-but-unread
         prev_timeout = self._sock.gettimeout()
         self._sock.settimeout(max_wait)
         try:
@@ -209,30 +228,46 @@ class _GDBClient:
         with self._lock:
             self._send_raw(frame)
 
+    def _fill_buf(self) -> None:
+        """Pull one chunk into the receive buffer. Propagates socket.timeout
+        (callers set a deadline and rely on it) and raises on clean close."""
+        chunk = self._sock.recv(4096)
+        if not chunk:
+            raise ConnectionError("GDB stub closed the connection")
+        self._rxbuf += chunk
+
     def _recv_pkt(self) -> bytes:
-        """Read one GDB RSP packet, return its payload. If ACK mode is on,
-        send '+' back to the stub so it doesn't re-send. The read loop
-        naturally skips any leading '+' ACKs from the stub."""
-        buf = b""
+        """Read one GDB RSP packet ($<payload>#cc), return its payload.
+
+        Framed out of the persistent buffer rather than one byte per
+        syscall. Parsing is NON-destructive until a complete packet is in
+        hand: ``self._rxbuf`` is only advanced once payload + '#' + the two
+        checksum chars are all present, so a mid-packet socket.timeout (the
+        wait_for_stop drain relies on this) leaves the partial packet intact
+        for the next call instead of corrupting the stream.
+
+        Leading '+'/'-' ACKs and any inter-packet junk are skipped, matching
+        the previous behaviour. If ACK mode is on, '+' is sent back so the
+        stub doesn't retransmit."""
         with self._lock:
             while True:
-                ch = self._sock.recv(1)
-                if ch == b"$":
-                    break
-                # Ignore '+' acks and any other bytes between packets.
-            while True:
-                ch = self._sock.recv(1)
-                if ch == b"#":
-                    # consume 2-char checksum
-                    self._sock.recv(2)
-                    break
-                buf += ch
-            if self._ack_mode:
-                try:
-                    self._sock.sendall(b"+")
-                except OSError:
-                    pass
-        return buf
+                start = self._rxbuf.find(b"$")
+                if start == -1:
+                    # No packet start yet — buffer holds only ACKs/junk.
+                    self._rxbuf = b""
+                else:
+                    hash_i = self._rxbuf.find(b"#", start + 1)
+                    if hash_i != -1 and len(self._rxbuf) >= hash_i + 3:
+                        payload = self._rxbuf[start + 1:hash_i]
+                        # drop payload + '#' + 2 checksum chars; keep the rest
+                        self._rxbuf = self._rxbuf[hash_i + 3:]
+                        if self._ack_mode:
+                            try:
+                                self._sock.sendall(b"+")
+                            except OSError:
+                                pass
+                        return payload
+                self._fill_buf()
 
     def _cmd(self, payload: bytes) -> bytes:
         self._send_pkt(payload)
@@ -693,6 +728,7 @@ class QEMUBackend(ARM32HalMixin, HalBackend):
         qemu_args: Optional[List[str]] = None,
         gdb_host: str = "localhost",
         gdb_port: int = 1234,
+        gdb_unix_socket: Optional[str] = None,
         qmp_host: str = "localhost",
         qmp_port: int = 4444,
         qmp_unix_socket: Optional[str] = None,
@@ -702,8 +738,14 @@ class QEMUBackend(ARM32HalMixin, HalBackend):
         self.arch = arch
         self.qemu_path = qemu_path
         self.qemu_args = qemu_args or []
+        self.gdb_unix_socket = gdb_unix_socket
         self.qmp_unix_socket = qmp_unix_socket
-        self._gdb = _GDBClient(gdb_host, gdb_port, arch=arch)
+        # This is the INTERNAL control channel (halucinator -> QEMU's
+        # gdbstub). A Unix socket is faster than loopback TCP. It is
+        # independent of the EXTERNAL gdb server (avatar spawn_gdb_server on
+        # gdb_server_port) that IDEs/VSCode attach to — that stays TCP.
+        self._gdb = _GDBClient(gdb_host, gdb_port, arch=arch,
+                               unix_path=gdb_unix_socket)
         # Prefer a Unix domain socket for QMP (much faster inject_irq
         # round-trips); fall back to TCP when no socket path is given.
         self._qmp = _QMPClient(qmp_host, qmp_port, unix_path=qmp_unix_socket)
@@ -731,16 +773,41 @@ class QEMUBackend(ARM32HalMixin, HalBackend):
     # ------------------------------------------------------------------
 
     def launch(self) -> None:
-        """Start QEMU and connect GDB + QMP."""
+        """Start QEMU and connect GDB + QMP.
+
+        When we spawn QEMU ourselves the internal gdb + qmp control channels
+        default to Unix domain sockets (faster than loopback TCP, no
+        delayed-ACK tail latency, and we own both ends). Set
+        ``HALUCINATOR_QEMU_TCP=1`` to force TCP instead. Explicitly passing
+        ``gdb_unix_socket`` / ``qmp_unix_socket`` always wins."""
         if self.qemu_path:
+            force_tcp = bool(os.environ.get("HALUCINATOR_QEMU_TCP"))
+            if not force_tcp:
+                if self.gdb_unix_socket is None:
+                    self.gdb_unix_socket = f"/tmp/hal-gdb-{self._gdb.port}.sock"
+                    self._gdb.unix_path = self.gdb_unix_socket
+                if self.qmp_unix_socket is None:
+                    self.qmp_unix_socket = f"/tmp/hal-qmp-{self._qmp.port}.sock"
+                    self._qmp.unix_path = self.qmp_unix_socket
+            # Remove stale socket files so QEMU's bind (server,nowait) wins.
+            for sp in (self.gdb_unix_socket, self.qmp_unix_socket):
+                if sp:
+                    try:
+                        os.unlink(sp)
+                    except OSError:
+                        pass
             if self.qmp_unix_socket:
                 qmp_arg = f"-qmp unix:{self.qmp_unix_socket},server,nowait"
             else:
                 qmp_arg = (f"-qmp tcp:{self._qmp.host}:{self._qmp.port},"
                            f"server,nowait")
+            if self.gdb_unix_socket:
+                gdb_arg = f"-gdb unix:{self.gdb_unix_socket},server,nowait"
+            else:
+                gdb_arg = f"-gdb tcp::{self._gdb.port}"
             cmd = [self.qemu_path] + self.qemu_args + [
                 "-S",  # start stopped
-                f"-gdb tcp::{self._gdb.port}",
+                gdb_arg,
                 qmp_arg,
             ]
             log.info("Launching QEMU: %s", " ".join(cmd))

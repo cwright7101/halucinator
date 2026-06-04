@@ -64,6 +64,8 @@ class TestGDBClient:
         client.port = 1234
         client.timeout = 5.0
         client.arch = "arm"
+        client.unix_path = None
+        client._rxbuf = b""
         client._lock = __import__("threading").Lock()
 
         # Build a byte stream from the responses
