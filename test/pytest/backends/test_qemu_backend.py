@@ -252,3 +252,42 @@ class TestInjectIrqGracefulDegradation:
         b.inject_irq(6)
         assert b._qmp.execute.call_count == 2
         assert getattr(b, "_irq_qmp_unavailable", False) is False
+
+    def test_hal_name_used_when_available(self, backend_with_mocks):
+        b = backend_with_mocks
+        b.arch = "arm"
+        b._qmp.execute.return_value = {"return": {}}
+        b.inject_irq(5)
+        b._qmp.execute.assert_called_once_with(
+            "hal-arm-inject-irq", {"num-irq": 5, "num-cpu": 0})
+
+    def test_falls_back_to_avatar_alias_and_caches(self, backend_with_mocks):
+        b = backend_with_mocks
+        b.arch = "arm"
+        calls = []
+
+        def fake_exec(cmd, args):
+            calls.append(cmd)
+            if cmd == "hal-arm-inject-irq":
+                return {"error": {"class": "CommandNotFound"}}
+            return {"return": {}}
+        b._qmp.execute.side_effect = fake_exec
+        b.inject_irq(5)
+        # tried the hal- name, fell back to the avatar- alias
+        assert calls == ["hal-arm-inject-irq", "avatar-arm-inject-irq"]
+        # second inject uses the cached avatar- name directly, no hal- retry
+        b.inject_irq(6)
+        assert calls == ["hal-arm-inject-irq", "avatar-arm-inject-irq",
+                         "avatar-arm-inject-irq"]
+        assert getattr(b, "_irq_qmp_unavailable", False) is False
+
+    def test_neither_name_warns_and_disables(self, backend_with_mocks):
+        b = backend_with_mocks
+        b.arch = "arm"
+        b._qmp.execute.return_value = {"error": {"class": "CommandNotFound"}}
+        b.inject_irq(5)
+        # tried hal- then avatar-, both missing -> disabled
+        assert b._qmp.execute.call_count == 2
+        assert getattr(b, "_irq_qmp_unavailable", False) is True
+        b.inject_irq(6)
+        assert b._qmp.execute.call_count == 2  # short-circuited

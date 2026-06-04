@@ -957,30 +957,58 @@ class QEMUBackend(ARM32HalMixin, HalBackend):
     # Optional: IRQ injection via QMP avatar commands
     # ------------------------------------------------------------------
 
-    def _qmp_inject(self, command: str, arguments: Dict) -> Optional[Dict]:
-        """Run an avatar IRQ-injection QMP command, degrading gracefully on
-        a stock QEMU that lacks the avatar-qemu IRQ patches.
+    # Canonical halucinator-native IRQ-injection QMP commands, each mapped
+    # to the deprecated avatar-qemu name kept as a fallback. halucinator
+    # prefers the hal-* name (the goal: QEMU forks that don't require
+    # avatar); against an older build that only has avatar-*, we fall back
+    # and remember. The cortex-m command (avatar-armv7m-inject-irq) is
+    # called directly and isn't aliased here — it's unchanged across builds.
+    _IRQ_CMD_ALIASES = {
+        "hal-shadow-irq": "avatar-shadow-irq",
+        "hal-arm-inject-irq": "avatar-arm-inject-irq",
+        "hal-mips-inject-irq": "avatar-mips-inject-irq",
+        "hal-ppc-inject-irq": "avatar-ppc-inject-irq",
+    }
 
-        QMP returns ``{"error": {"class": "CommandNotFound", ...}}`` for an
-        unknown command rather than raising. Without this, inject_irq would
-        silently no-op (no IRQ delivered, no signal why). Here we log one
-        clear warning and then short-circuit subsequent calls — the avatar
-        IRQ commands ship together, so if one is missing they all are."""
+    @staticmethod
+    def _is_cmd_not_found(resp: Any) -> bool:
+        return (isinstance(resp, dict)
+                and isinstance(resp.get("error"), dict)
+                and resp["error"].get("class") == "CommandNotFound")
+
+    def _qmp_inject(self, command: str, arguments: Dict) -> Optional[Dict]:
+        """Run an IRQ-injection QMP command, preferring the hal-* name and
+        falling back to the deprecated avatar-* alias on older QEMU builds.
+
+        QMP returns ``{"error": {"class": "CommandNotFound"}}`` for an
+        unknown command (it doesn't raise). We try the canonical name; if
+        it's absent and an avatar-* alias exists, we use that and cache the
+        choice. If neither exists (a stock QEMU with no IRQ patches at all),
+        we log one clear warning and short-circuit further attempts instead
+        of silently delivering nothing."""
         if getattr(self, "_irq_qmp_unavailable", False):
             return None
-        resp = self._qmp.execute(command, arguments)
-        if isinstance(resp, dict) and "error" in resp:
-            err = resp["error"] if isinstance(resp["error"], dict) else {}
-            if err.get("class") == "CommandNotFound":
-                self._irq_qmp_unavailable = True
-                log.warning(
-                    "QEMU build lacks the avatar IRQ-injection QMP command "
-                    "%r — IRQs will NOT be delivered to the target. Build "
-                    "avatar-qemu with the IRQ patches (halucinator/avatar-qemu"
-                    " PR #5) or use a backend that injects via the "
-                    "IrqController.", command)
-            else:
-                log.warning("inject_irq: QMP %s failed: %r", command, err)
+        resolved = getattr(self, "_irq_cmd_resolved", None)
+        cmd = resolved.get(command, command) if resolved else command
+        resp = self._qmp.execute(cmd, arguments)
+        if self._is_cmd_not_found(resp):
+            alias = self._IRQ_CMD_ALIASES.get(command)
+            if alias and alias != cmd:
+                resp_alias = self._qmp.execute(alias, arguments)
+                if not self._is_cmd_not_found(resp_alias):
+                    if resolved is None:
+                        self._irq_cmd_resolved = resolved = {}
+                    resolved[command] = alias  # remember the working name
+                    return resp_alias
+            # Neither hal-* nor avatar-* exists — no IRQ patches at all.
+            self._irq_qmp_unavailable = True
+            log.warning(
+                "QEMU build lacks the IRQ-injection QMP command %r (and its "
+                "avatar-* alias) — IRQs will NOT be delivered to the target. "
+                "Build QEMU with the halucinator IRQ overlay/patches, or use "
+                "a backend that injects via the IrqController.", command)
+        elif isinstance(resp, dict) and "error" in resp:
+            log.warning("inject_irq: QMP %s failed: %r", cmd, resp["error"])
         return resp
 
     def inject_irq(self, irq_num: int) -> None:
@@ -1000,7 +1028,7 @@ class QEMUBackend(ARM32HalMixin, HalBackend):
         # GIC_ISPENDR path which can race with the live target.
         if arch in ("arm", "arm64"):
             self._qmp_inject(
-                "avatar-arm-inject-irq",
+                "hal-arm-inject-irq",
                 {"num-irq": int(irq_num), "num-cpu": 0},
             )
             return
@@ -1013,14 +1041,14 @@ class QEMUBackend(ARM32HalMixin, HalBackend):
             irq_number_phys = getattr(ctrl, "irq_number_phys_addr", None)
             if irq_fired_phys is not None and irq_number_phys is not None:
                 self._qmp_inject(
-                    "avatar-shadow-irq",
+                    "hal-shadow-irq",
                     {"number-addr": int(irq_number_phys),
                      "fired-addr":  int(irq_fired_phys),
                      "irq-num":     int(irq_num)},
                 )
                 return
             self._qmp_inject(
-                "avatar-mips-inject-irq",
+                "hal-mips-inject-irq",
                 {"num-irq": int(irq_num), "num-cpu": 0},
             )
             return
@@ -1045,7 +1073,7 @@ class QEMUBackend(ARM32HalMixin, HalBackend):
             irq_number_addr = getattr(ctrl, "irq_number_addr", None)
             if irq_fired_addr is not None and irq_number_addr is not None:
                 self._qmp_inject(
-                    "avatar-shadow-irq",
+                    "hal-shadow-irq",
                     {"number-addr": int(irq_number_addr),
                      "fired-addr":  int(irq_fired_addr),
                      "irq-num":     int(irq_num)},
@@ -1054,7 +1082,7 @@ class QEMUBackend(ARM32HalMixin, HalBackend):
             # No shadow-state — fall back to QMP pulse (works only
             # on e500 where the racy pulse happens to land).
             self._qmp_inject(
-                "avatar-ppc-inject-irq",
+                "hal-ppc-inject-irq",
                 {"num-irq": 4 if arch != "ppc64" else 5, "num-cpu": 0},
             )
             return
