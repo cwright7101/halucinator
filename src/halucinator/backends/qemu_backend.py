@@ -780,7 +780,12 @@ class QEMUBackend(ARM32HalMixin, HalBackend):
         delayed-ACK tail latency, and we own both ends). Set
         ``HALUCINATOR_QEMU_TCP=1`` to force TCP instead. Explicitly passing
         ``gdb_unix_socket`` / ``qmp_unix_socket`` always wins."""
-        if self.qemu_path:
+        # Only spawn QEMU if we were given a path AND the caller hasn't
+        # already started one (some callers — e.g. the direct main path and
+        # the libafl live test — pre-spawn QEMU themselves and set
+        # ``_process`` before calling launch(); we must connect to that one,
+        # not spawn a redundant second QEMU on a different endpoint).
+        if self.qemu_path and self._process is None:
             force_tcp = bool(os.environ.get("HALUCINATOR_QEMU_TCP"))
             if not force_tcp:
                 if self.gdb_unix_socket is None:
@@ -817,20 +822,36 @@ class QEMUBackend(ARM32HalMixin, HalBackend):
             )
             time.sleep(0.5)  # let QEMU initialize
 
-        retries = 5
+        # Retry while QEMU's gdb endpoint comes up. TCP not-listening raises
+        # ConnectionRefusedError; a Unix socket QEMU hasn't created yet raises
+        # FileNotFoundError. Both mean "not ready" — newer QEMU (libafl 10.x)
+        # can take >0.5 s to bind the socket, especially on a loaded CI host.
+        retries = 10
         for i in range(retries):
             try:
                 self._gdb.connect()
                 break
-            except ConnectionRefusedError:
+            except (ConnectionRefusedError, FileNotFoundError):
                 if i == retries - 1:
                     raise
                 time.sleep(0.5)
 
-        try:
-            self._qmp.connect()
-        except (ConnectionRefusedError, OSError):
-            log.warning("QMP connection failed — IRQ injection will not work")
+        # QMP is best-effort, but retry the same not-ready errors so a slow
+        # QEMU start doesn't silently disable IRQ injection.
+        for i in range(retries):
+            try:
+                self._qmp.connect()
+                break
+            except (ConnectionRefusedError, FileNotFoundError):
+                if i == retries - 1:
+                    log.warning(
+                        "QMP connection failed — IRQ injection will not work")
+                else:
+                    time.sleep(0.5)
+            except OSError:
+                log.warning(
+                    "QMP connection failed — IRQ injection will not work")
+                break
 
     def shutdown(self) -> None:
         self._gdb.disconnect()
