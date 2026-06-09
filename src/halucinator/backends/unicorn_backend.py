@@ -646,7 +646,7 @@ class UnicornBackend(ARMHalMixin, HalBackend):
         # 13) before the control transfer completes. We emulate a flat
         # segmentation model: decode the segment-changing instruction's
         # frame off the stack and resume at the target EIP, ignoring the
-        # (flat) selector. This is what lets the SAGE image cross from
+        # (flat) selector. This is what lets the RTU image cross from
         # _start into usrInit. See _x86_handle_seg_fault.
         if (self.arch_name == "x86" and pc != -1
                 and self._x86_handle_seg_fault(uc, pc)):

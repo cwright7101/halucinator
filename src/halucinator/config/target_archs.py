@@ -85,8 +85,8 @@ def _get_halucinator_targets() -> Dict[str, Dict[str, Any]]:
                 _QEMU_DEFAULT_LOC, "ppc64-softmmu/qemu-system-ppc64"
             ),
         },
-        # 32-bit x86 / i386, little-endian. Target for the Schneider SAGE
-        # C3414 RTU's x86 VxWorks image (a fully-symbolized ELF EXEC).
+        # 32-bit x86 / i386, little-endian. Target for an i386 VxWorks RTU
+        # image (a fully-symbolized ELF EXEC).
         "x86": {
             "avatar_arch": X86,
             "qemu_target": lambda: _qemu_target("X86QemuTarget"),

@@ -6,7 +6,7 @@ EFLAGS/CS/EIP onto the stack and vector to the IDT entry's handler. The
 handler runs and returns with `iret`, which pops that frame.
 
 Unicorn's in-process x86 model does not deliver hardware interrupts on
-its own, and the SAGE VxWorks image never sets up a real 8259/8254 we
+its own, and the i386 VxWorks RTU image never sets up a real 8259/8254 we
 could drive — the BSP timer init is hardware-timing bound and is stubbed.
 So this controller *synthesises* the interrupt entry directly:
 

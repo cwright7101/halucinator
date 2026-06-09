@@ -16,8 +16,8 @@ class X86QemuTarget(HALQemuTarget):
           * The return address is the word at the top of the stack ([esp]),
             and `ret` pops it.
 
-        This is the convention VxWorks (and gcc -m32) use for the SAGE
-        C3414 RTU image.
+        This is the convention VxWorks (and gcc -m32) use for the i386
+        VxWorks RTU image.
     """
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
