@@ -139,24 +139,3 @@ class ClockTickStarter(BPHandler):
         # TCBs, but we still want a periodic tick driving the
         # ArmVicController.
         return self.skip_real, None
-
-class TaskSpawnLogger(BPHandler):
-    '''Observe-only: log each VxWorks task as it is spawned, to show the
-    tasks the scheduler creates and runs during bring-up. taskSpawn's
-    signature is taskSpawn(name, priority, options, stackSize, entryPt, ...);
-    we read the name (arg0) and entry point (arg4). Returns False so the
-    real taskSpawn runs and the task actually goes through the scheduler.'''
-
-    @bp_handler(['taskSpawn'])
-    def log_spawn(self, qemu: "HalBackend", addr: int) -> Tuple[bool, None]:
-        try:
-            name_ptr = qemu.get_arg(0)
-            name = qemu.read_string(name_ptr) if name_ptr else '<null>'
-        except Exception:  # noqa: BLE001
-            name = '<unreadable>'
-        try:
-            entry = qemu.get_arg(4)
-        except Exception:  # noqa: BLE001
-            entry = 0
-        hlog.info('VxWorks taskSpawn: name=%s entry=0x%x', name, entry)
-        return False, None
