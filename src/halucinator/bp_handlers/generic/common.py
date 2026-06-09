@@ -1008,7 +1008,7 @@ class IntLvlVecChkArm(BPHandler):
 
     Our handler returns the level/vec from the latest IRQ injected by
     the TimerModel (queued on backend._pending_irqs). If no IRQ is
-    pending, returns level=0, vec=0 (the M340's clock IRQ is 0 in our
+    pending, returns level=0, vec=0 (the target PLC's clock IRQ is 0 in our
     config).
 
     Halucinator configuration:

@@ -367,7 +367,7 @@ class UnicornBackend(ARMHalMixin, HalBackend):
         # code can hit UC_ERR_INSN_INVALID. Pin a concrete classic core so
         # unicorn uses a decoder that implements them. ARM926EJ-S (ARMv5TEJ)
         # is the typical core in this era of VxWorks PLC/SoC firmware (e.g.
-        # Schneider M340); override with HAL_ARM_CPU_MODEL=UC_CPU_ARM_<name>.
+        # the target PLC); override with HAL_ARM_CPU_MODEL=UC_CPU_ARM_<name>.
         if self.arch_name == "arm":
             import os as _os
             model_name = _os.environ.get("HAL_ARM_CPU_MODEL", "UC_CPU_ARM_926")
@@ -434,7 +434,7 @@ class UnicornBackend(ARMHalMixin, HalBackend):
         if _os.environ.get("HAL_TRACK_READS") == "1":
             # Track reads from the .bss region only (above the firmware
             # file's end-of-image). HAL_BSS_START / HAL_BSS_END configure
-            # the range; default matches the M340 layout.
+            # the range; default matches the target PLC layout.
             bss_start = int(_os.environ.get("HAL_BSS_START", "0x20420000"), 16)
             bss_end = int(_os.environ.get("HAL_BSS_END", "0x24000000"), 16)
             self._written: set = set()
@@ -545,7 +545,7 @@ class UnicornBackend(ARMHalMixin, HalBackend):
             self._uc.hook_add(unicorn.UC_HOOK_CODE, _call_trace)
 
             # ALSO trace indirect calls: pattern is `mov lr, pc; mov pc, Rn`
-            # (ARMv4-era vfunc dispatch, used by Schneider's C++ thunks).
+            # (ARMv4-era vfunc dispatch, used by the firmware's C++ thunks).
             # We capture this by hooking AFTER `mov pc, ip` executes -- when
             # PC differs from expected fall-through, it was an indirect call.
             self._last_pc_was_movpc = False
@@ -1084,9 +1084,10 @@ class UnicornBackend(ARMHalMixin, HalBackend):
                         # sanity: if SP is already garbage, refuse SP-peek
                         # rather than reading 0s from a lazy-mapped MMIO page.
                         # Accepted ranges: lowram, sdram, sdram_bank1, and the
-                        # high_stack_ram window the M340 task allocator uses
-                        # (m340_auto_memory.yaml maps 0xffff0000-0xffffffff
-                        # as real RAM specifically so high-SP stacks work).
+                        # high_stack_ram window the target PLC task allocator
+                        # uses (the target's auto-memory YAML maps
+                        # 0xffff0000-0xffffffff as real RAM specifically so
+                        # high-SP stacks work).
                         if not (0x00000000 <= sp < 0x10000000
                                 or 0x20000000 <= sp < 0x24000000
                                 or 0xffff0000 <= sp < 0x100000000):

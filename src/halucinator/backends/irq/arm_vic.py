@@ -1,8 +1,8 @@
 """ARM (A-profile, ARMv5/v6/v7-A) external-IRQ delivery for the
 in-process UnicornBackend.
 
-This is the ARM analogue of ``backends/irq/x86_pic.py`` and follows the
-same threading discipline: a periodic timer thread only *queues* the
+This follows the same threading discipline as the synthesised-IRQ
+approach used for the x86 PC path: a periodic timer thread only *queues* the
 interrupt (``trigger``), and the dispatch thread performs the actual
 CPU-state mutation (``deliver``) between ``emu_start`` chunks. Unicorn is
 not safe against register writes mid-``emu_start`` and a cross-thread
@@ -14,12 +14,13 @@ Why a "VIC" controller separate from the GIC one
 HALucinator already ships ``backends/irq/gic.py`` for GICv2/v3 SoCs (it
 does a real ``GICD_ISPENDR`` MMIO write and relies on the firmware's GIC
 to take the exception). Many older ARM SoCs — including the ARM926EJ-S in
-the Schneider Modicon M340 (BMX P34 1000) — do **not** have a GIC. They
+some ARMv5 VxWorks PLCs — do **not** have a GIC. They
 use a vendor on-chip interrupt controller (a PrimeCell VIC-style or a
-fully custom block, on the M340 the system controller window at
+fully custom block, on this SoC the system controller window at
 ``0xfffff000``). Unicorn models none of these, so for those targets the
 controller must *synthesise* the architectural IRQ exception entry
-directly, exactly like ``x86_pic`` synthesises the PC interrupt frame.
+directly, exactly like the synthesised-IRQ approach used for the x86 PC
+path builds the PC interrupt frame.
 
 Architectural IRQ entry reproduced here (ARM ARM, A2.6.8 / B1.8.3)::
 
@@ -33,7 +34,7 @@ Architectural IRQ entry reproduced here (ARM ARM, A2.6.8 / B1.8.3)::
     PC                 = vector_base + 0x18      (the IRQ vector)
 
 ``vector_base`` is ``0x00000000`` when SCTLR.V==0 (low/normal vectors)
-and ``0xffff0000`` when SCTLR.V==1 (high vectors). The M340 reset stub
+and ``0xffff0000`` when SCTLR.V==1 (high vectors). The target PLC reset stub
 sets SCTLR=0xc0000278 (V bit clear), so the default here is the low
 vector base. The word at ``vector_base + 0x18`` is the firmware's IRQ
 vector instruction — on VxWorks/ARM it is typically
@@ -132,7 +133,8 @@ class ArmVicController(IrqController):
     def trigger(self, backend: "HalBackend", num: int) -> None:
         """Queue an interrupt for delivery on the dispatch thread.
 
-        Mirrors x86_pic: we ONLY append to ``backend._pending_irqs``.
+        Mirrors the synthesised-IRQ approach used for the x86 PC path: we
+        ONLY append to ``backend._pending_irqs``.
         We must NOT touch unicorn from this (timer) thread — unicorn is
         not thread-safe and a cross-thread ``emu_stop()`` deadlocks the
         dispatch thread. ``UnicornBackend.cont()`` runs ARM in bounded
