@@ -1,0 +1,526 @@
+# the target BARE march with the CORRECT load base.
+#
+# ROOT CAUSE (2026-06-10): the image is linked for base 0x20010000, NOT
+# 0x20000000. We had been mapping it 0x10000 too low, which made EVERY
+# absolute pointer (region-A jump tables, cmgr literals, the qPriList C++
+# vtable, etc.) read 0x10000 high. That single error masqueraded as a
+# "+0x10000 pointer glitch" / "missing 64KB NAND block" and spawned two
+# workarounds (path2 pointer patches; an alternate patched image zero-insertion) that
+# were both unnecessary and, in the case of an alternate patched image, corrupting.
+#
+# The low 64KB (0x20000000-0x2000ffff) is reserved SDRAM (ARM exception
+# vectors / VxWorks low globals) the image sits ABOVE. PC-relative early
+# boot is base-agnostic, so the reset stub ran "fine" at the wrong base
+# until the first absolute-pointer deref (FUN_20001510) -- the original
+# "wall". Loading at 0x20010000 resolves all of them natively: NO image
+# surgery, NO pointer patches.
+#
+# Evidence: at base 0x20010000 on the ORIGINAL unmodified arm-vxworks-plc.bin, the
+# qPriList object chain is fully self-consistent (slot 0x203d85e0 -> G
+# 0x203d85e8; G+0x38 == G; vtable[0]=0x202b927c -> `push {sl,fp,lr}`
+# prologue), the config table 0x203c51f0 -> AT91 SSC table (0xfffc4000),
+# and 4x more code-ptr literals land on real function prologues than at
+# base 0x20000000.
+machine:
+  arch: arm
+  cpu_model: arm
+  entry_addr: 0x20010184          # reset vector (file off 0x184) at the TRUE base
+  init_sp: 0x00203ff0
+  # ARM A-profile external-IRQ synthesiser (no GIC on AT91RM9200). The clock
+  # ISR address is learned from sysClkConnect (register_clock_isr); reset stub
+  # sets SCTLR.V==0 so vector_base=0x0.
+  interrupt_controller:
+    type: arm_vic
+    options:
+      vector_base: 0x0
+
+memories:
+  # Reserved low 64KB the image is linked to sit above (vectors/low globals).
+  sdram_reserved:
+    base_addr: 0x20000000
+    permissions: rwx
+    size: 0x00010000
+  # The image, loaded at its TRUE link base.
+  sdram:
+    base_addr: 0x20010000
+    file: arm-vxworks-plc.bin
+    permissions: rwx
+    size: 0x03ff0000
+  lowram:
+    base_addr: 0x00000000
+    permissions: rwx
+    size: 0x00400000
+  sdram_bank1:
+    base_addr: 0x08000000
+    permissions: rwx
+    size: 0x00400000
+  halucinator:
+    base_addr: 0x04000000
+    permissions: rwx
+    size: 0x00a00000
+  # the target X-bus backplane window (EBI CS @0x30000000), 16MB (slots windowed at
+  # 0x30000000 + slot*0x100000). Modelled as REAL RW RAM, not an MMIO peripheral:
+  # the X-bus dual-port RAM must PERSIST writes. XbRamXMgr::CheckXRam copies a
+  # pattern to X-RAM (XCopyFromSRamToXRam) and reads it back (XCopyFromXRamToSRam)
+  # to verify; with a GenericPeripheral (writes ignored, reads 0) the read-back
+  # never matches, so the X-bus init RETRY-LOOPS forever (copy/verify-fail/free/
+  # retry -- the XCopy + semGive + memPartDeleteFree hot loop). As RAM the verify
+  # passes and the init proceeds. The controller-ID read (0x300000f8, expects
+  # 0x50) now reads 0 -> XbHwLayer logs a benign mismatch and continues; status
+  # bit5 reads 0 -> the byte-copy busy-polls fall through.
+  xbus_ram:
+    base_addr: 0x30000000
+    permissions: rwx
+    size: 0x01000000
+
+# Start MINIMAL: only genuine hardware peripherals + the free-running timer
+# delay primitive (shifted +0x10000 to the true base). NO pointer patches,
+# NO firmware-skip hooks -- we want to see the natural frontier at the
+# correct base and add models only at real faults.
+intercepts:
+  # AT91 free-running counter (0xfffa4050) delay primitive -- monotonic so
+  # busy-waits terminate. Function VA shifted +0x10000 (0x202b0878 -> 0x202c0878).
+  - class: halucinator.bp_handlers.Timer
+    function: freerun_counter_fffa4050
+    addr: 0x202c0878
+    registration_args:
+      scale: 1
+
+  # ---- VxWorks visibility (observational; all return False = patch-and-continue) ----
+  # Kernel diagnostic messages -- our window into how far boot gets.
+  - class: halucinator.bp_handlers.vxworks.vx_logging.VxLogging
+    function: logMsg
+  # Record every task the kernel spawns (tRootTask, tShell, tNetTask, ...).
+  - class: halucinator.bp_handlers.vxworks.tasks.Tasks
+    function: log_taskSpawn
+    addr: 0x202ab070          # taskSpawn
+    registration_args:
+      task_spawn_file: taskSpawn.log
+
+  # NAND flash driver init: kl_NandFlashDrvInit polls
+  # the unmodeled NAND chip (flashReset/getFlashType/kl_SizeNandFlash) forever.
+  # The C++ ctor `global ctors keyed to SerialNb` -> ModbusFC125::ModbusFC125 ->
+  # getFlashPointer -> initFlashComponent -> FallowFlash::FallowFlash calls it
+  # first thing; skipping it lets the flash reads take their error path.
+  - class: halucinator.bp_handlers.SkipFunc
+    function: kl_NandFlashDrvInit
+
+  # ethernetInit (KlOsStart::start -> ethernetInit @0x200db164) builds a RAM
+  # disk + DOS filesystem before the network section: ramDevCreate ->
+  # xbdBlkDevCreateSync -> dosfsDiskFormat -> chkdsk. dosfsDiskFormat issues
+  # block-I/O (bio) writes through the XBD framework and pends on a bio-done
+  # semaphore that never fires in the rehost (no real block device / the
+  # per-device XBD bio path doesn't complete) -- the whole app (kl_Start ->
+  # ord_IniSys -> PmTskPil -> Modbus) sits behind it. Skip the format + chkdsk
+  # (callsite treats r0 != -1 as success; r0 is the device-name ptr, nonzero)
+  # so ethernetInit proceeds to the network bring-up and returns to kl_Start.
+  - class: halucinator.bp_handlers.SkipFunc
+    function: dosfsDiskFormat
+  - class: halucinator.bp_handlers.SkipFunc
+    function: chkdsk
+
+  # sas_dbg_printf (0x2018b454) is the firmware's SAS debug-console printf.
+  # It writes into a console pipe/ring whose drain consumer never runs in the
+  # rehost, so after enough boot output a write blocks on the "space available"
+  # semaphore (semTake) and never returns -- the task pends and the kernel
+  # idle-loops (reschedule). It first bites inside determineIpParametersFromWheels
+  # (+0xe4), stalling ethernetInit -> kl_Start -> the whole PLC app. It's pure
+  # logging with no logic side effects, so skip it globally (callers ignore the
+  # return). Our firmware-progress visibility comes from logMsg (intercepted)
+  # instead.
+  - class: halucinator.bp_handlers.SkipFunc
+    function: sas_dbg_printf
+    addr: 0x2018b454          # NOTE: the symbol named sas_dbg_printf is a different addr; pin the real one
+    registration_args:
+      silent: true
+
+  # sdCardMgt (kl_Start @0x200646cc) probes the removable SD-card slot. The SD
+  # controller isn't modeled, so its detect/init helper busy-polls the card
+  # status with kl_CntSyst1MicroRd microsecond delays forever (15976+ reads,
+  # never returns) -- stalling kl_Start before ord_IniSys -> PmTskPil -> Modbus.
+  # The SD card is optional storage and sdCardMgt only sets two "card present /
+  # initialised" globals (both 0 on the no-card path); skipping leaves them 0,
+  # i.e. the natural "no SD card" state. kl_Start ignores its return value.
+  - class: halucinator.bp_handlers.SkipFunc
+    function: sdCardMgt
+
+  # XbMgr::runStateCold (0x2003a85c) -- the X-bus backplane manager's cold-start
+  # handler, dispatched by the PLC sub-manager state machine (runStateMachine ->
+  # PmTskPil::runStateInit -> PmSubMgr::run -> PmSubCell::process -> here). It
+  # blocks in an X-bus driver sub-call (0x2014xxxx) waiting for the backplane /
+  # I/O modules to respond -- hardware the rehost has none of. Because it's one
+  # sub-manager AHEAD of ScMgr::runStateCold (which creates the comm system +
+  # the Modbus server) in the SAME dispatch chain, the block starves ScMgr and
+  # the Modbus server never starts. Skipping it lets PmSubCell::process return
+  # the next node so the chain advances to ScMgr -> SC_Create -> ComSysCPU ->
+  # startEthernetManager -> createModbusServer125/startModbusServer125. The
+  # X-bus cold init is irrelevant to Modbus-TCP (no I/O modules to enumerate).
+  # NOTE: wholesale-skipping XbMgr::runStateCold (0x2003a85c) left the X-bus
+  # object uninitialised, which later crashed XbServPort->XbLeBld ctor on a
+  # garbage Xbus pointer (the comm system's X-bus ports genuinely need it). So
+  # we skip only its blocking sub-call instead (see below), letting the rest of
+  # XbMgr::runStateCold initialise the Xbus object.
+  # (XbMgr_runStateCold wholesale skip REMOVED.)
+
+  # sas_sdcColdAndWarm (0x2004e15c) -- the SAS cold/warm SD-card handler, called
+  # near the end of sas_Cold (PmSubSas::runStateColdBegin). It blocks waiting on
+  # the unmodeled SD-card controller (consistent with the sdCardMgt skip above;
+  # the rehost has no SD card). Its return value is unused by sas_Cold (the next
+  # call kl_ErrSystRd overwrites r0). Skip it so sas_Cold returns and the Cold
+  # sub-manager dispatch chain advances toward ScMgr::runStateCold (Modbus).
+  - class: halucinator.bp_handlers.SkipFunc
+    function: sas_sdcColdAndWarm
+
+  # Xbus::ExecDaemonTask (0x2014ad04) -- the X-bus scan daemon. With no I/O
+  # modules its scan has nothing real to do, and (combined with the instant-
+  # exchange-ack model below) it would grab the XbGpxScheduler system mutex
+  # (SystemLock) then block inside CheckGpxActivity HOLDING it, deadlocking the
+  # PLC init task's SystemLock. Make the daemon task exit immediately so it never
+  # grabs the mutex; the init then takes it freely and advances toward ScMgr.
+  - class: halucinator.bp_handlers.SkipFunc
+    function: Xbus_ExecDaemonTask
+    addr: 0x2014ad04
+
+  # XbGpxScheduler::SystemLock/SystemUnlock (0x2014e684 / 0x2014e6a8) -- the
+  # X-bus scheduler system mutex (semMTake). Multiple X-bus init functions
+  # (SetXRamSpeed, XbHwIntConnectAndEnable, ...) take it and DEADLOCK -- it's
+  # held by an X-bus task that never releases in the rehost (no X-bus HW). The
+  # rehost X-bus has no real concurrent access, so no-op both (return without
+  # taking/giving) to break the deadlock across all callers -> XbMgr completes
+  # -> ScMgr -> the Modbus server. SystemLock returns success.
+  - class: halucinator.bp_handlers.SkipFunc
+    function: XbGpxScheduler_SystemLock
+    addr: 0x2014e684
+  - class: halucinator.bp_handlers.SkipFunc
+    function: XbGpxScheduler_SystemUnlock
+    addr: 0x2014e6a8
+
+  # klOmInit (kl_Start @0x20064aa8) fills its object-map buffer then busy-waits
+  # for an AT91 PIO "ready" input: `do { r0 = poll(); } while (r0 == 0)` at
+  # 0x20064ae4/0x20064ae8. poll() (0x20064a60) reads a PIO pin-data register
+  # (PIOC PDSR 0xfffff63c bit29 / PIOD PDSR 0xfffff83c bit14) -- an external
+  # hardware-ready GPIO that is always 0 in the rehost, so klOmInit spins
+  # forever and kl_Start never reaches ord_IniSys. Force the poll result
+  # nonzero at the loop's test so the wait completes on the first iteration
+  # (the buffer is already initialised by then). Scoped to this loop address.
+  - class: halucinator.bp_handlers.SetRegisters
+    function: klOmInit_gpio_ready
+    addr: 0x20064ae8
+    registration_args:
+      registers:
+        r0: 1
+
+  # =====================================================================
+  # X-BUS / COMM-SYSTEM / ETHERNET MODEL -- the chain that carries the PLC
+  # sub-manager Cold dispatch from XbMgr through ScMgr::runStateCold ->
+  # SC_Create -> ComSysCPU -> startEthernetManager -> the Modbus :502 server.
+  # Each entry models one piece of absent backplane/I-O/SD/UART/board HW that
+  # the cold init otherwise busy-polls or pends on forever. Diagnosed via the
+  # snapshot lab (xbus_lab.py); these supersede the in-memory UC hooks.
+  # =====================================================================
+
+  # (1) XbExchg::RemoteExchange ack-poll: `do{exchange; CheckRemoteExchange;}
+  # while([this+0x3e]==0)` waits for a remote I/O module to ACK by setting
+  # [r4+0x3e]. With no modules it spins ~1.38M iters. Force the ack each pass so
+  # every exchange "completes" on iteration 1. (reg-relative -> RegMemWrite.)
+  - class: halucinator.bp_handlers.RegMemWrite
+    function: XbExchg_RemoteExchange_ack
+    addr: 0x20149284
+    registration_args:
+      reg: r4
+      offset: 0x3e
+      value: 3
+      size: 1
+
+  # (2) XbMgr::runStateCold HIGHER-LEVEL BYPASS. After XbHwInit/XbHwTest have
+  # BUILT the Xbus object (which the comm system's XbServPort/XbLeBld ctors
+  # genuinely need), jump from the `bl SetXRamSpeed` call site (0x2003a91c)
+  # straight to the function epilogue/return (0x2003aa10), skipping the
+  # bottomless SetXRamSpeed/XbHwIntConnectAndEnable/elfArchVerify tail that
+  # depends on real I/O modules. r0=0 = runStateCold success. THE KEYSTONE that
+  # reaches ScMgr in 0.3s. (set r0 AND pc, then continue at the new pc.)
+  - class: halucinator.bp_handlers.SetRegisters
+    function: XbMgr_runStateCold_bypass
+    addr: 0x2003a91c
+    registration_args:
+      registers:
+        r0: 0
+        pc: 0x2003aa10
+
+  # (3) XbGpxContext::WaitEndLe loops while GetGpxState()==1 (waiting for an
+  # X-bus GPX exchange to "end"). Force the state-check r0!=1 so it ends at once.
+  - class: halucinator.bp_handlers.SetRegisters
+    function: XbGpxContext_WaitEndLe
+    addr: 0x20151f98
+    registration_args:
+      registers:
+        r0: 0
+
+  # (4) XbTimer::getGpxTime reads a 16-bit GPX counter from X-RAM that never
+  # advances in the rehost, so X-bus elapsed-time/timeout loops never progress.
+  # Return an incrementing counter so elapsed-time advances and the scans/
+  # timeouts complete. (Counter: +0x100 per read, wrapped to 16 bits.)
+  - class: halucinator.bp_handlers.Counter
+    function: XbTimer_getGpxTime
+    addr: 0x201476b8
+    registration_args:
+      increment: 0x100
+      mask: 0xffff
+
+  # (5) IoDeviceNoConf::StateMachine: `ldrsb r3,[this+0x21c]; if r3<0 return 1`.
+  # Phantom I/O devices are ABSENT -> force the device state [r0+0x21c]<0 so the
+  # no-config scan declares "absent/done" instead of polling X-bus forever.
+  - class: halucinator.bp_handlers.RegMemWrite
+    function: IoDeviceNoConf_absent
+    addr: 0x201283ac
+    registration_args:
+      reg: r0
+      offset: 0x21c
+      value: 0xff
+      size: 1
+
+  # (6) AT91F_MCI_SDCard_Init: model NO CARD PRESENT. It drives the whole SD
+  # command sequence (CMD0/CMD8/ACMD41-OCR-loop/GetCID/GetCSD), each polling
+  # MCI_SR/RSPR for a phantom card and spinning forever (the comm system's
+  # SD/trace path). The the target boots fine without an SD card; return its "no card"
+  # code (3) at entry so every MCI poll loop collapses at once.
+  - class: halucinator.bp_handlers.ReturnConstant
+    function: AT91F_MCI_SDCard_Init_nocard
+    addr: 0x202cc9cc
+    registration_args:
+      ret_value: 3
+      silent: true
+
+  # (7) ViewTrace::sTask = `do{Poll(p);}while(*active!=0)`; Poll drives
+  # saveData/saveFile (VxWorks open()/write() to the absent SD/flash FS) and
+  # never clears the active-trace ptr, so the single sTask call never returns
+  # and blocks the dispatcher. Trace is purely diagnostic -> skip sTask (return
+  # at entry). (Must skip sTask, NOT Poll -- no-oping Poll leaves the do-while.)
+  - class: halucinator.bp_handlers.SkipFunc
+    function: ViewTrace_sTask
+    addr: 0x202cfc00
+    registration_args:
+      silent: true
+
+  # (8) AT91F_DBGU_Printk polls DBGU_SR (0xFFFFF214) for TXRDY (bit1) which the
+  # unmodeled debug-UART never sets, so the comm system's heavy trace output
+  # spins. At the SR-test `tst r3,#0x2` (0x200114b0) force r3 bit1 set (=2; r3
+  # is reloaded right after, so overwriting it is safe) so TX is always "ready".
+  - class: halucinator.bp_handlers.SetRegisters
+    function: AT91F_DBGU_Printk_txrdy
+    addr: 0x200114b0
+    registration_args:
+      registers:
+        r3: 2
+
+  # (9) ETHERNET ENABLE GATE. ComSysCPU::ctor starts the Ethernet manager (->
+  # Modbus TCP :502) only if board-config flag config[0x70] != 0; else it calls
+  # httpinit() and never opens :502. The rehost lacks the ethernet-HW ID so the
+  # flag reads 0. Force r2!=0 at the gate `cmp r2,#0x0` (0x200566f0) so the
+  # else-branch (startEthernetManager @0x2005670c) is taken.
+  - class: halucinator.bp_handlers.SetRegisters
+    function: ComSysCPU_eth_enable
+    addr: 0x200566f0
+    registration_args:
+      registers:
+        r2: 1
+
+  # =====================================================================
+  # STAGE 1 -- EMAC TX / ARP stubs: make the VxWorks TCP/IP stack complete
+  # its transmits so the firmware's REAL Modbus :502 server reaches LISTEN.
+  # With these the boot runs: startEthernetManager -> EthernetManager::
+  # initialize -> (component-start) Message::start -> Port502Server::
+  # createListenSocket -> socket()/bind(192.168.1.101:502)/listen(32) ->
+  # returns 1. Confirmed: :502 is bound + LISTENING (idle, awaiting a client).
+  # Packets are dropped into the void (no host bridge yet). STAGE 2 will
+  # replace the TX drop with a host bridge (TX->host, RX inject + EMAC IRQ)
+  # and remove the ARP stub so a real the PLC configurator / Modbus client can connect.
+  # =====================================================================
+
+  # EMAC TX complete: ARM920_Send_Internal queues a frame into a 40-deep TX
+  # descriptor ring and returns 0xb ("ring full") when the head descriptor's
+  # used-bit is still set -- which the unmodeled EMAC never clears (no TX-
+  # complete IRQ), so after a few sends every TX fails and the sending task
+  # spins forever inside ip_output. Model TX as instantly complete: return 0
+  # (success) so the frame is "sent" (dropped) and ip_output/ether_output
+  # proceed. (Stage 2: capture the frame -> host instead of dropping.)
+  - class: halucinator.bp_handlers.ReturnConstant
+    function: ARM920_Send_Internal_txdone
+    addr: 0x200129e0
+    registration_args:
+      ret_value: 0
+      silent: true
+
+  # ARP resolve: arpresolve(ac, rt, m, dst, desten) returns 1 when the dest
+  # MAC is resolved, 0 when not (packet held pending ARP, request queued). With
+  # no host network no reply arrives, so ip_output holds packets and retries
+  # forever. Force "resolved" (return 1); the dest MAC is garbage but irrelevant
+  # since the TX stub drops the frame. (Stage 2: REMOVE so real host ARP works.)
+  - class: halucinator.bp_handlers.ReturnConstant
+    function: arpresolve_stub
+    addr: 0x201d2354
+    registration_args:
+      ret_value: 1
+      silent: true
+
+  # =====================================================================
+  # STAGE 2 -- SOCKET-LAYER MODBUS :502 BRIDGE (no TAP). A real Modbus/TCP
+  # client (pymodbus / the PLC configurator / the PLC configurator) connects to a
+  # HOST TCP server and its bytes are fed to the firmware's REAL Port502Server
+  # by intercepting the VxWorks socket thunks its non-blocking select()-poll
+  # loop (PollMsgToRout) drives. The firmware's own UMAS/Modbus processing
+  # builds every response -- VERIFIED: Read Device ID (FC 0x2B) returns
+  # "the PLC" / "v3.7", UMAS (FC 0x5A, the PLC configurator's protocol) answers,
+  # FC 0x03 gets a proper Modbus exception. One SocketBridge instance (cached
+  # by class) owns all 8 hooks + the host TCP server. listen_fd=11 (the
+  # Port502 createListenSocket fd). Conn fds 200+ avoid colliding with real
+  # VxWorks fds. Each hook scopes to Port502Server (caller-LR for select,
+  # fd-in-map for recv/send/close) and passes other sockets through.
+  #
+  # tcp_port 502 is the real Modbus port the PLC configurator expects, but binding <1024
+  # needs root on macOS/Linux -- run halucinator with sudo, OR set tcp_port to
+  # e.g. 1502 for non-root testing (the firmware side is unaffected).
+  # =====================================================================
+  - class: halucinator.bp_handlers.SocketBridge
+    function: select
+    addr: 0x20236f90
+    registration_args:
+      tcp_port: 502
+      listen_fd: 11
+      first_conn_fd: 200
+      max_conns: 32
+      bind_host: "0.0.0.0"
+      poll_caller_lo: 0x200c91d0
+      poll_caller_hi: 0x200c962f
+      errno_scratch_addr: 0x04700000
+      errno_value: 0x46
+      verbose: false
+  - class: halucinator.bp_handlers.SocketBridge
+    function: accept
+    addr: 0x201faebc
+  - class: halucinator.bp_handlers.SocketBridge
+    function: recv
+    addr: 0x201fb354
+  - class: halucinator.bp_handlers.SocketBridge
+    function: send
+    addr: 0x201fb16c
+  - class: halucinator.bp_handlers.SocketBridge
+    function: close
+    addr: 0x20231244
+  - class: halucinator.bp_handlers.SocketBridge
+    function: shutdown
+    addr: 0x201fb6a8
+  - class: halucinator.bp_handlers.SocketBridge
+    function: setsockopt
+    addr: 0x201fb46c
+  - class: halucinator.bp_handlers.SocketBridge
+    function: __errno
+    addr: 0x2022941c
+
+  # ---- Boot line ----
+  # Inject the AT91RM9200 BSP boot line (config.h DEFAULT_BOOT_LINE): STATIC IP,
+  # NO DHCP flag -- overrides the firmware's DHCP-enabled bootline so usrNetInit
+  # doesn't block waiting for a DHCP lease that never arrives in the rehost.
+  - class: halucinator.bp_handlers.vxworks.boot.Boot
+    function: bootStringToStruct
+    registration_args:
+      bootline: "atemac(0,0) vxw:vxWorks h=192.168.1.100 e=192.168.1.101:ffffff00 u=at91 pw=at91 tn=AT91RM9200"
+
+  # Register the clock as the AT91 System-Timer PIT handler. The firmware
+  # never populates this global in the rehost (*0x2042e5d0 == 0), so
+  # mr9200Int1Dispatcher's `if (*PITh && (ST_SR&ST_IMR)&1)` skips the clock.
+  # Write usrClock(0x2001bc68) into it at the dispatcher entry each tick so the
+  # dispatcher then calls it -> tickAnnounce -> time advances.
+  - class: halucinator.bp_handlers.SetMemory
+    function: register_pit_handler
+    addr: 0x200196e8
+    registration_args:
+      addresses:
+        541255120: 536984680
+
+  # Force muxEndProtoRegister's protocol-bind to run INLINE instead of posting
+  # to the END RX job queue and pending forever (the queue's owner task
+  # 0x204f831c never processes the job in the rehost -- an ordering deadlock,
+  # the END RX/poll task only really runs after a920_PollStart which is
+  # downstream of ipAttach). At 0x201bc684 (right after `bl jobQueueTask`) force
+  # r0=-1 so `cmn r0,#1` sets Z and the `beq 0x201bc73c` takes the firmware's
+  # OWN inline register path. Targeted to this call site only.
+  - class: halucinator.bp_handlers.SetRegisters
+    function: muxEndProtoRegister_force_inline
+    addr: 0x201bc684
+    registration_args:
+      registers:
+        r0: 4294967295
+
+  # ---- System clock tick (drives taskDelay/timeouts/periodic work) ----
+  # Once kernel vectors are installed the
+  # synth tick routes through vector_base+0x18 -> kernel intEnt -> the BSP's
+  # xxxIntLvlVecChk to learn which IRQ fired. We must intercept that BSP routine
+  # (mr9200IntLvlVecChk) or the kernel reads the unmodeled AIC and dispatches to
+  # garbage (tick fires but never reaches tickAnnounce -> time never advances).
+  - class: halucinator.bp_handlers.IntLvlVecChkArm
+    function: mr9200IntLvlVecChk
+    registration_args:
+      default_irq: 1
+      level: 1
+      silent: true
+  # Log which vector the kernel connects its ISRs to (confirms the clock IRQ#).
+  - class: halucinator.bp_handlers.vxworks.interrupts.Interrupts
+    function: intConnect
+  # Learn the connected clock ISR; the controller vectors the synth tick at it.
+  - class: halucinator.bp_handlers.vxworks.sys_clock.SysClock
+    function: sysClkConnect
+    class_args:
+      irq_num: 1
+      name: sysClk
+  # Start the periodic tick only once the kernel is multitasking (reschedule is
+  # the steady-state hot symbol). Unmask CPSR.I so queued ticks can land.
+  - class: halucinator.bp_handlers.vxworks.sys_clock.ClockTickStarter
+    function: reschedule
+    class_args:
+      irq_num: 1
+      name: sysClk
+      rate: 0.005
+      unmask_arm_irqs: true
+
+peripherals:
+  sysctrl_0xffff:
+    base_addr: 0xffff0000
+    emulate: At91SysCtrl
+    permissions: rw-
+    size: 0x00010000
+  # the target rotary IP-config switches ("wheels") -- TestReadWheels (0x202c0fa8,
+  # called from determineIpParametersFromWheels) does `ldrh [0x10200000]` to
+  # read the switch position. Unmapped -> UC_ERR_READ_UNMAPPED at pc=0x202c1008.
+  # Returning 0 makes TestReadWheels report a readable switch at position 0,
+  # which determineIpParametersFromWheels decodes (tst #0xf000 == 0) as the
+  # DEFAULT path -> use the stored/bootline IP (192.168.1.101) instead of a
+  # wheel-encoded address. Lets ethernetInit finish IP setup and return to
+  # kl_Start -> ord_IniSys -> PmTskPil -> the Modbus server.
+  wheels_10200000:
+    base_addr: 0x10200000
+    emulate: GenericPeripheral
+    permissions: rw-
+    size: 0x00001000
+  uart_10400000:
+    base_addr: 0x10400000
+    emulate: GenericPeripheral
+    permissions: rw-
+    size: 0x00001000
+  at91_tc_fffa:
+    base_addr: 0xfffa0000
+    emulate: GenericPeripheral
+    permissions: rw-
+    size: 0x00010000
+  at91_periph_mid:
+    base_addr: 0xfffb0000
+    emulate: At91Emac
+    permissions: rw-
+    size: 0x00040000
+  # AT91 EBI chip-select 3 external-device window (0x40000000). Firmware
+  # pokes 0x40000002 (strb 0xff) -- external bus device. Absorb it.
+  ebi_cs3_40000000:
+    base_addr: 0x40000000
+    emulate: GenericPeripheral
+    permissions: rw-
+    size: 0x01000000

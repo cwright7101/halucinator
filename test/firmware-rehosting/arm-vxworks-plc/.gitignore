@@ -1,0 +1,7 @@
+# Derived from a proprietary firmware image — never commit these.
+*.bin
+symbols.csv
+*.csv
+*.log
+__pycache__/
+mmio_trace.sqlite

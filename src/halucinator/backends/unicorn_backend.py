@@ -35,6 +35,10 @@ try:
         import unicorn.ppc_const as ppc_const
     except ImportError:
         ppc_const = None  # type: ignore[assignment]
+    try:
+        import unicorn.x86_const as x86_const
+    except ImportError:
+        x86_const = None  # type: ignore[assignment]
     _HAVE_UNICORN = True
 except ImportError:
     _HAVE_UNICORN = False
@@ -43,6 +47,7 @@ except ImportError:
     arm64_const = None  # type: ignore[assignment]
     mips_const = None  # type: ignore[assignment]
     ppc_const = None  # type: ignore[assignment]
+    x86_const = None  # type: ignore[assignment]
 
 
 # ---------------------------------------------------------------------------
@@ -62,6 +67,7 @@ _ARCH_MAP: Dict[str, Tuple[str, str, bool, bool, int]] = {
     "powerpc":        ("ppc",    "ppc32_be", False, True, 4),
     "powerpc:MPC8XX": ("ppc",    "ppc32_be", False, True, 4),
     "ppc64":          ("ppc",    "ppc64_be", False, True, 8),
+    "x86":            ("x86",    "x86_32",   False, False, 4),
 }
 
 _PERM_MAP = {
@@ -176,6 +182,28 @@ def _get_ppc_reg_map(word: int = 4) -> Dict[str, int]:
     return m
 
 
+def _get_x86_reg_map() -> Dict[str, int]:
+    if "x86" in _REG_MAPS_CACHE:
+        return _REG_MAPS_CACHE["x86"]
+    if x86_const is None:
+        return {}
+    names = ("eax", "ebx", "ecx", "edx", "esi", "edi", "ebp", "esp",
+             "eip", "eflags", "cs", "ds", "es", "fs", "gs", "ss")
+    m: Dict[str, int] = {}
+    for name in names:
+        v = getattr(x86_const, f"UC_X86_REG_{name.upper()}", None)
+        if v is not None:
+            m[name] = v
+    # halucinator's generic code (dispatch loop, regs.pc, MMIO pc capture)
+    # uses the architecture-neutral names "pc" and "sp".
+    if "eip" in m:
+        m["pc"] = m["eip"]
+    if "esp" in m:
+        m["sp"] = m["esp"]
+    _REG_MAPS_CACHE["x86"] = m
+    return m
+
+
 def _reg_map_for_arch(arch: str) -> Dict[str, int]:
     info = _ARCH_MAP.get(arch)
     if info is None:
@@ -190,6 +218,8 @@ def _reg_map_for_arch(arch: str) -> Dict[str, int]:
     if uc_arch == "ppc":
         word = info[4]
         return _get_ppc_reg_map(word)
+    if uc_arch == "x86":
+        return _get_x86_reg_map()
     return {}
 
 
@@ -260,11 +290,25 @@ class UnicornBackend(ARMHalMixin, HalBackend):
         self._recover_bad_calls = (
             _os.environ.get("HAL_RECOVER_BAD_CALLS") == "1")
         self._bad_call_recover: Dict[int, int] = {}
+        # MMU flat-fallback (opt-in HAL_MMU_FLAT_FALLBACK=1): on an ARM data/
+        # prefetch abort whose faulting address IS backed in physical memory
+        # (uc.mem_read succeeds — i.e. the MMU translation failed but the page
+        # is present), emulate the faulting load/store flat (VA==PA) and step
+        # past it. Lets MMU-library code that walks page tables not yet mapped
+        # in the active context proceed, where unicorn's CP15/TTBR handling
+        # would otherwise data-abort-loop forever. See _mmu_flat_complete.
+        self._mmu_flat_fallback = (
+            _os.environ.get("HAL_MMU_FLAT_FALLBACK") == "1")
+        self._mmu_flat_count: Dict[int, int] = {}
         self._bp_callbacks: Dict[int, Callable] = {}  # bp_id → callback
         # Pending IRQ injected from another thread (peripheral_server zmq
         # handler). cont() drains the queue before re-entering emu_start
         # so the synthetic exception frame is set up single-threaded.
         self._pending_irqs: List[int] = []
+        # x86: when _intr_hook resolves a far control transfer (#GP from a
+        # missing GDT), it stashes the resume EIP here so cont() re-enters
+        # emu_start instead of aborting on the UcError. None when idle.
+        self._x86_resume_eip: Optional[int] = None
 
         # Opt-in: skip an unhandled SVC instruction (advance past it and
         # zero r0) instead of aborting. Used to
@@ -337,6 +381,9 @@ class UnicornBackend(ARMHalMixin, HalBackend):
                 uc_mode = unicorn.UC_MODE_PPC64 | unicorn.UC_MODE_BIG_ENDIAN
             else:
                 uc_mode = unicorn.UC_MODE_PPC32 | unicorn.UC_MODE_BIG_ENDIAN
+        elif arch_str == "x86":
+            uc_arch = unicorn.UC_ARCH_X86
+            uc_mode = unicorn.UC_MODE_32
         else:
             raise ValueError(f"Unsupported arch for UnicornBackend: {arch_str!r}")
 
@@ -425,6 +472,20 @@ class UnicornBackend(ARMHalMixin, HalBackend):
         )
         # Log CPU exceptions (unhandled traps, illegal insns, FP faults)
         self._uc.hook_add(unicorn.UC_HOOK_INTR, self._intr_hook)
+
+        # x86 uses *port* I/O (the IN/OUT instructions) for the PC chipset
+        # — the 8259 PIC, 16550 UART, 8254 PIT, etc. — in addition to
+        # memory-mapped I/O. Unicorn delivers those through dedicated
+        # UC_HOOK_INSN hooks rather than the memory hooks. Without them an
+        # `out` to an unmodeled port faults the CPU. We absorb them: OUT is
+        # a no-op, IN returns 0 (and IN of a UART line-status register is
+        # special-cased to report "transmitter empty + data not ready" so
+        # the firmware's UART poll loops don't spin forever). This mirrors
+        # the AutoPeripheral catch-all policy for MMIO.
+        if arch_str == "x86" and x86_const is not None:
+            self._port_reads: Dict[int, int] = {}
+            self._add_insn_hook(self._x86_in_hook, x86_const.UC_X86_INS_IN)
+            self._add_insn_hook(self._x86_out_hook, x86_const.UC_X86_INS_OUT)
 
         # Diagnostic: HAL_TRACK_READS=1 logs the first read from every SDRAM
         # address that hasn't been written to in this run. Stripped firmware
@@ -575,6 +636,123 @@ class UnicornBackend(ARMHalMixin, HalBackend):
                     self._last_movpc_pc = addr & ~1
             self._uc.hook_add(unicorn.UC_HOOK_CODE, _indirect_trace)
 
+        # HAL_PIN_REGS="0xADDR=0xVALUE[,0xADDR=0xVALUE...]": model read-only
+        # hardware/boot-ROM latch registers that live in RAM space but the
+        # firmware never writes (e.g. an RTOS kernel "system-ready" flag
+        # in RAM, many readers, no writer). A boot seed gets clobbered by
+        # the firmware's .bss-clearing memset; this hook re-pins the value on
+        # every read so the load always returns it, exactly like a HW control
+        # register. (Unicorn's read hook fires before the load samples memory,
+        # so writing here makes the subsequent load return the pinned value.)
+        _pin = _os.environ.get("HAL_PIN_REGS")
+        if _pin and arch_str == "arm":
+            pins = {}
+            for tok in _pin.split(","):
+                tok = tok.strip()
+                if not tok or "=" not in tok:
+                    continue
+                a_s, v_s = tok.split("=", 1)
+                try:
+                    pins[int(a_s, 0)] = int(v_s, 0)
+                except ValueError:
+                    log.warning("HAL_PIN_REGS: bad token %r", tok)
+            if pins:
+                lo = min(pins); hi = max(pins) + 4
+                log.info("HAL_PIN_REGS: pinning %d register(s): %s",
+                         len(pins), ", ".join("0x%08x=0x%08x" % (a, v)
+                                              for a, v in pins.items()))
+                # Optional PC gate: HAL_PIN_PC_LO/HI restrict pinning to reads
+                # whose PC is in [LO,HI). Needed for phase-dependent flags that
+                # must be FALSE during init and TRUE only at a specific point
+                # (e.g. the multitasking-start dispatch) -- pinning globally
+                # corrupts the init logic that expects the flag clear.
+                _pc_lo = _os.environ.get("HAL_PIN_PC_LO")
+                _pc_hi = _os.environ.get("HAL_PIN_PC_HI")
+                pc_lo = int(_pc_lo, 0) if _pc_lo else None
+                pc_hi = int(_pc_hi, 0) if _pc_hi else None
+                pc_reg = self._reg_map.get("pc")
+                # HAL_PIN_ARM_PC=0xADDR: latch the pins ON the first time this PC
+                # executes, and keep them on thereafter. Models a boot-ROM/HW
+                # flag that transitions to "ready" at a single point (the
+                # scheduler-start entry) and stays set -- cleaner than a PC
+                # range for a flag that must be false through ALL of init and
+                # true through ALL of multitasking.
+                _arm = _os.environ.get("HAL_PIN_ARM_PC")
+                arm_pc = int(_arm, 0) if _arm else None
+                pin_state = {"armed": arm_pc is None}
+                self._pin_arm_pc = arm_pc
+                self._pin_state = pin_state
+                if arm_pc is not None:
+                    # Armed from _code_hook (fires per-instruction) -- a tight
+                    # begin/end UC_HOOK_CODE doesn't reliably fire.
+                    def _arm_hook(uc, addr, size, ud):
+                        if (addr & ~1) == arm_pc and not pin_state["armed"]:
+                            pin_state["armed"] = True
+                            log.info("HAL_PIN_REGS: armed at 0x%08x", addr)
+                    self._uc.hook_add(unicorn.UC_HOOK_CODE, _arm_hook)
+                def _pin_read(uc, access, addr, size, value, ud):
+                    if not pin_state["armed"]:
+                        return
+                    if pc_lo is not None:
+                        try:
+                            pc = uc.reg_read(pc_reg)
+                        except Exception:
+                            return
+                        if not (pc_lo <= pc < pc_hi):
+                            return
+                    for pa, pv in pins.items():
+                        if addr <= pa < addr + size or pa <= addr < pa + 4:
+                            try:
+                                uc.mem_write(pa, pv.to_bytes(4, "little"))
+                            except Exception:
+                                pass
+                self._uc.hook_add(unicorn.UC_HOOK_MEM_READ, _pin_read,
+                                  begin=lo, end=hi - 1)
+
+        # Diagnostic: HAL_WATCH_WRITE="0xADDR[,0xADDR...]" logs PC + value on every
+        # write to those addresses ("who writes this field?"). For finding skipped
+        # object-init writes (e.g. a TCB OBJ_CORE self-ptr never set).
+        _ww = _os.environ.get("HAL_WATCH_WRITE")
+        if _ww and arch_str == "arm":
+            _waddrs = set(int(x, 0) for x in _ww.split(",") if x.strip())
+            _wlo = min(_waddrs); _whi = max(_waddrs) + 4
+            _wpc = self._reg_map.get("pc")
+            def _watch_write(uc, access, addr, size, value, ud):
+                if any(a <= addr < a + size or addr <= a < addr + 4 for a in _waddrs):
+                    try:
+                        pc = uc.reg_read(_wpc)
+                    except Exception:
+                        pc = 0
+                    log.error("WATCH-WRITE: [0x%08x]<=0x%08x (size %d) PC=0x%08x",
+                              addr, value, size, pc)
+            self._uc.hook_add(unicorn.UC_HOOK_MEM_WRITE, _watch_write,
+                              begin=_wlo, end=_whi - 1)
+
+        # Diagnostic: HAL_STEP_TRACE="0xLO-0xHI[:path]" single-step-logs every
+        # instruction whose PC is in [LO,HI): PC | sp | r0-r3 | sl | ip | lr.
+        # For pinning frame/register state to the exact instruction (e.g. a
+        # context-switch TCB load or a trap-style ldm epilogue).
+        _st = _os.environ.get("HAL_STEP_TRACE")
+        if _st and arch_str == "arm":
+            _spec = _st.split(":", 1)
+            _lo, _hi = (int(x, 0) for x in _spec[0].split("-"))
+            _stf = open(_spec[1] if len(_spec) > 1 else "/tmp/hal_step_trace.txt", "w")
+            _st_n = {"n": 0}
+            _rmap = self._reg_map
+            def _step_trace(uc, addr, size, ud):
+                if not (_lo <= addr < _hi) or _st_n["n"] >= 200000:
+                    return
+                _st_n["n"] += 1
+                try:
+                    vals = tuple(uc.reg_read(_rmap.get(r)) for r in
+                                 ("sp", "r0", "r1", "r2", "r3", "r10", "r12", "lr"))
+                    _stf.write("0x%08x sp=0x%08x r0=0x%08x r1=0x%08x r2=0x%08x r3=0x%08x "
+                               "sl=0x%08x ip=0x%08x lr=0x%08x\n" % ((addr,) + vals))
+                    _stf.flush()
+                except Exception:
+                    pass
+            self._uc.hook_add(unicorn.UC_HOOK_CODE, _step_trace)
+
     def dump_pc_sample(self, top: int = 10) -> None:
         hist = getattr(self, "_pc_hist", None)
         if not hist:
@@ -588,6 +766,18 @@ class UnicornBackend(ARMHalMixin, HalBackend):
             pc = self.read_register("pc")
         except Exception:
             pc = -1
+        # x86: VxWorks (and most x86 kernels) reload segment selectors from
+        # a GDT they build at boot — typically via a far `iretd`/`retf`/
+        # `ljmp` to a flat code selector. Unicorn's x86 model has no GDT
+        # loaded at reset, so the selector reference raises a #GP (vector
+        # 13) before the control transfer completes. We emulate a flat
+        # segmentation model: decode the segment-changing instruction's
+        # frame off the stack and resume at the target EIP, ignoring the
+        # (flat) selector. This is what lets the RTU image cross from
+        # _start into usrInit. See _x86_handle_seg_fault.
+        if (self.arch_name == "x86" and pc != -1
+                and self._x86_handle_seg_fault(uc, pc)):
+            return
         # On cortex-m3, an ISR returning via `bx lr` jumps to an
         # EXC_RETURN magic value (top nibble 0xF). Unicorn raises an
         # exception here rather than firing the fetch-unmapped hook,
@@ -629,9 +819,275 @@ class UnicornBackend(ARMHalMixin, HalBackend):
                          "return lr=0x%08x", intno, pc, lr)
                 self.write_register("pc", lr)
                 return
+        # Opt-in MMU flat-fallback (HAL_MMU_FLAT_FALLBACK=1): on the first ARM
+        # data/prefetch abort, DISABLE the MMU (clear SCTLR.M) so the rest of
+        # the run is flat (VA==PA). unicorn's CP15/TTBR handling is unreliable
+        # for this firmware (TTBR0 reads 0), translation-faulting on pages that
+        # are physically present; since the firmware's mappings are identity,
+        # running flat is equivalent and avoids both data- and prefetch-abort
+        # loops. We do this LATE (on the fault, after usrMmuInit/vmLib is up),
+        # not by skipping usrMmuInit, so vmLib stays initialised. Falls back to
+        # per-instruction flat-completion of the load/store if SCTLR can't be
+        # cleared on this unicorn build.
+        if (self._mmu_flat_fallback and self.arch_name == "arm"
+                and intno in (3, 4) and pc not in (-1, 0)):
+            if self._mmu_disable(uc):
+                return  # MMU now off -> faulting instr re-executes flat
+            if intno == 4 and self._mmu_flat_complete(uc, pc):
+                return
         log.error("UnicornBackend: CPU exception/interrupt %d at pc=0x%x",
                   intno, pc)
         uc.emu_stop()
+
+    def _mmu_disable(self, uc) -> bool:
+        """Clear SCTLR.M (and TLB-relevant bits) to turn off ARM MMU
+        translation so execution proceeds flat (VA==PA). Idempotent: once
+        done, returns True on subsequent calls without re-touching CP15.
+        Returns False if CP15 SCTLR isn't accessible on this unicorn build."""
+        if getattr(self, "_mmu_off", False):
+            return True
+        from unicorn import arm_const
+        # CP15 SCTLR = coproc 15, crn=c1, crm=c0, opc1=0, opc2=0.
+        spec = (15, 0, 0, 1, 0, 0, 0)
+        try:
+            sctlr = uc.reg_read(arm_const.UC_ARM_REG_CP_REG, spec)
+        except Exception:  # noqa: BLE001
+            return False
+        if not (sctlr & 0x1):
+            # MMU already off — nothing to do, but a fault still happened, so
+            # this isn't our case; let the caller try other handlers.
+            return False
+        try:
+            uc.reg_write(arm_const.UC_ARM_REG_CP_REG, spec + (sctlr & ~0x1,))
+        except Exception:  # noqa: BLE001
+            return False
+        # Verify it took.
+        try:
+            if uc.reg_read(arm_const.UC_ARM_REG_CP_REG, spec) & 0x1:
+                return False
+        except Exception:  # noqa: BLE001
+            return False
+        self._mmu_off = True
+        log.info("UnicornBackend: MMU flat-fallback -> disabled MMU "
+                 "(SCTLR.M cleared 0x%x -> 0x%x); running flat from here",
+                 sctlr, sctlr & ~0x1)
+        return True
+
+    # capstone ARM register name -> unicorn UC_ARM_REG_* id
+    @staticmethod
+    def _arm_reg_id(name: str):
+        from unicorn import arm_const
+        alias = {"sb": "r9", "sl": "r10", "fp": "r11", "ip": "r12",
+                 "r13": "sp", "r14": "lr", "r15": "pc"}
+        n = alias.get(name.lower(), name.lower())
+        return getattr(arm_const, "UC_ARM_REG_" + n.upper(), None)
+
+    def _mmu_flat_complete(self, uc, pc: int) -> bool:
+        """Emulate a single faulting ARM load/store flat (VA==PA) and advance
+        PC by 4. Returns True if it handled the instruction. Only acts when the
+        faulting address is backed in physical memory (uc.mem_read works), which
+        is the 'MMU translation missing but page present' case. Unhandled forms
+        (LDM/STM, etc.) return False so the caller aborts as before."""
+        try:
+            import capstone
+            import capstone.arm as cs_arm
+        except ImportError:
+            return False
+        cs = getattr(self, "_cs_arm", None)
+        if cs is None:
+            cs = capstone.Cs(capstone.CS_ARCH_ARM, capstone.CS_MODE_ARM)
+            cs.detail = True
+            self._cs_arm = cs
+        try:
+            ins = next(cs.disasm(bytes(uc.mem_read(pc, 4)), pc), None)
+        except Exception:  # noqa: BLE001
+            return False
+        if ins is None:
+            return False
+        # Map the instruction to (access size, is_load, signed).
+        I = cs_arm
+        sizes = {
+            I.ARM_INS_LDR: (4, True, False), I.ARM_INS_STR: (4, False, False),
+            I.ARM_INS_LDRB: (1, True, False), I.ARM_INS_STRB: (1, False, False),
+            I.ARM_INS_LDRH: (2, True, False), I.ARM_INS_STRH: (2, False, False),
+            I.ARM_INS_LDRSB: (1, True, True), I.ARM_INS_LDRSH: (2, True, True),
+        }
+        if ins.id not in sizes:
+            return False
+        size, is_load, signed = sizes[ins.id]
+        # Operands: a register operand (dest for load / src for store) and a
+        # memory operand {base, index, lshift, disp}.
+        reg_op = None
+        mem_op = None
+        for o in ins.operands:
+            if o.type == I.ARM_OP_REG and reg_op is None:
+                reg_op = o
+            elif o.type == I.ARM_OP_MEM:
+                mem_op = o
+        if reg_op is None or mem_op is None:
+            return False
+        m = mem_op.mem
+        base_id = self._arm_reg_id(cs.reg_name(m.base)) if m.base else None
+        if base_id is None:
+            return False
+        addr = uc.reg_read(base_id) & 0xFFFFFFFF
+        if m.index:
+            idx_id = self._arm_reg_id(cs.reg_name(m.index))
+            if idx_id is None:
+                return False
+            idxval = uc.reg_read(idx_id) & 0xFFFFFFFF
+            addr += (idxval << m.lshift) if m.lshift else idxval
+        addr = (addr + m.disp) & 0xFFFFFFFF
+        # Only act if the physical page is present (translation-missing case).
+        try:
+            data = bytes(uc.mem_read(addr, size))
+        except Exception:  # noqa: BLE001
+            return False  # genuinely unmapped -> real fault
+        rid = self._arm_reg_id(cs.reg_name(reg_op.reg))
+        if rid is None:
+            return False
+        if is_load:
+            val = int.from_bytes(data, "little")
+            if signed and (val & (1 << (size * 8 - 1))):
+                val -= 1 << (size * 8)
+            uc.reg_write(rid, val & 0xFFFFFFFF)
+        else:
+            val = uc.reg_read(rid) & ((1 << (size * 8)) - 1)
+            uc.mem_write(addr, val.to_bytes(size, "little"))
+        # Pre/post-indexed writeback updates the base register with `addr`
+        # (pre) — capstone exposes writeback via ins.writeback.
+        if getattr(ins, "writeback", False):
+            uc.reg_write(base_id, addr)
+        uc.reg_write(self._reg_map["pc"], pc + 4)
+        self._mmu_flat_count[pc] = self._mmu_flat_count.get(pc, 0) + 1
+        if self._mmu_flat_count[pc] <= 3:
+            log.info("UnicornBackend: MMU flat-fallback %s @0x%08x addr=0x%08x "
+                     "(x%d)", ins.mnemonic, pc, addr, self._mmu_flat_count[pc])
+        return True
+
+    # ------------------------------------------------------------------
+    # x86 port I/O (IN / OUT) — catch-all so the PC chipset doesn't fault
+    # ------------------------------------------------------------------
+
+    # Standard PC-AT 16550 UART line-status register offsets (COM1 0x3F8,
+    # COM2 0x2F8, COM3 0x3E8, COM4 0x2E8). LSR is base+5; bit5 (THRE) and
+    # bit6 (TEMT) report the transmitter is ready. We return those set so
+    # firmware that polls "is the UART ready to send?" makes progress, and
+    # leave bit0 (data-ready) clear so receive polls fall through.
+    _X86_UART_BASES = (0x3F8, 0x2F8, 0x3E8, 0x2E8)
+    _X86_UART_LSR_THRE_TEMT = 0x60  # bits 5+6
+
+    def _add_insn_hook(self, callback: Callable, insn_id: int) -> None:
+        """Register a UC_HOOK_INSN hook for a specific instruction id.
+        The instruction id is passed via the aux1 parameter on this
+        unicorn build; older bindings used a positional `arg1`. Try the
+        keyword forms in turn and warn (but don't abort) if none work."""
+        for kw in ("aux1", "arg1"):
+            try:
+                self._uc.hook_add(unicorn.UC_HOOK_INSN, callback,
+                                  **{kw: insn_id})
+                return
+            except TypeError:
+                continue
+            except Exception as exc:  # noqa: BLE001
+                log.warning("UnicornBackend: x86 INSN hook (id=%d) failed: %s",
+                            insn_id, exc)
+                return
+        log.warning("UnicornBackend: could not register x86 INSN hook id=%d "
+                    "(unicorn binding lacks aux1/arg1); IN/OUT may fault",
+                    insn_id)
+
+    def _x86_in_hook(self, uc, port, size, user_data):
+        """Handle an `in` from an I/O port. Return value is written back
+        into the destination register by unicorn (return it from here)."""
+        val = 0
+        for base in self._X86_UART_BASES:
+            if port == base + 5:  # Line Status Register
+                val = self._X86_UART_LSR_THRE_TEMT
+                break
+        log.debug("x86 IN  port=0x%x size=%d -> 0x%x", port, size, val)
+        return val
+
+    def _x86_out_hook(self, uc, port, size, value, user_data):
+        """Handle an `out` to an I/O port. Capture printable bytes written
+        to a UART transmit-holding register (base+0) as console output;
+        otherwise drop the write (no-op, like the MMIO catch-all)."""
+        for base in self._X86_UART_BASES:
+            if port == base:  # Transmit Holding Register
+                low = value & 0xFF
+                if low == 0x0A or low == 0x0D or 0x20 <= low < 0x7F:
+                    buf = getattr(self, "_x86_uart_buf", None)
+                    if buf is None:
+                        buf = self._x86_uart_buf = bytearray()
+                    if low == 0x0A:
+                        line = buf.decode("latin-1").rstrip("\r")
+                        log.info("x86 UART(port 0x%x): %s", base, line)
+                        buf.clear()
+                    elif low != 0x0D:
+                        buf.append(low)
+                break
+        log.debug("x86 OUT port=0x%x size=%d value=0x%x", port, size, value)
+
+    def _x86_handle_seg_fault(self, uc, pc: int) -> bool:
+        """Flat-segmentation recovery for an x86 #GP at a segment-changing
+        instruction. Decodes the on-stack frame and resumes at the target
+        EIP, treating all selectors as a flat 0-based segment (which is how
+        the firmware's own GDT is configured once it's loaded).
+
+        Handled forms:
+          iretd  (0xCF)          frame: [esp]=EIP [esp+4]=CS [esp+8]=EFLAGS
+          retf   (0xCB)          frame: [esp]=EIP [esp+4]=CS
+          retf N (0xCA imm16)    as retf, then esp += N
+          ljmp m16:32 (0xEA …)   far direct jump: operand carries EIP+CS
+
+        Returns True when it recognised and resolved the fault."""
+        try:
+            opc = bytes(uc.mem_read(pc, 1))
+        except Exception:  # noqa: BLE001
+            return False
+        if not opc:
+            return False
+        op = opc[0]
+        try:
+            esp = self.read_register("esp")
+            if op == 0xCF:  # iretd
+                eip, _cs, eflags = struct.unpack(
+                    "<III", bytes(uc.mem_read(esp, 12)))
+                self.write_register("esp", esp + 12)
+                self.write_register("eflags", eflags | 0x2)
+                self.write_register("eip", eip)
+            elif op in (0xCB, 0xCA):  # retf / retf imm16
+                eip, _cs = struct.unpack("<II", bytes(uc.mem_read(esp, 8)))
+                pop = 8
+                if op == 0xCA:
+                    pop += struct.unpack("<H", bytes(uc.mem_read(pc + 1, 2)))[0]
+                self.write_register("esp", esp + pop)
+                self.write_register("eip", eip)
+            elif op == 0xEA:  # ljmp ptr16:32
+                eip = struct.unpack("<I", bytes(uc.mem_read(pc + 1, 4)))[0]
+                self.write_register("eip", eip)
+            else:
+                return False
+        except Exception as exc:  # noqa: BLE001
+            log.warning("x86 seg-fault recovery at pc=0x%x op=0x%02x "
+                        "failed: %s", pc, op, exc)
+            return False
+        new_eip = self.read_register("eip")
+        # An `iretd` (0xCF) here unwinds an interrupt frame — either back
+        # to the code the tick interrupted, or (via the VxWorks intExit
+        # reschedule) into a freshly-dispatched task. Either way the
+        # clock ISR has finished, so clear the X86PicController's
+        # re-entrancy guard to let the next tick in.
+        if op == 0xCF:
+            ctrl = getattr(self, "_irq_controller", None)
+            if ctrl is not None and hasattr(ctrl, "on_isr_return"):
+                ctrl.on_isr_return()
+        log.info("x86: flat-segment recovery for op=0x%02x at pc=0x%08x "
+                 "-> resume eip=0x%08x", op, pc, new_eip)
+        # Restart emu_start at the recovered EIP (cont() re-enters).
+        uc.emu_stop()
+        self._x86_resume_eip = new_eip
+        return True
 
     def _invalid_mem_hook(self, uc, access, addr, size, value, user_data):
         """Intercept invalid memory accesses. On cortex-m, a fetch from
@@ -994,20 +1450,25 @@ class UnicornBackend(ARMHalMixin, HalBackend):
         # from another thread doesn't bubble out to the dispatch loop.
         # We only return when a real breakpoint hook fires
         # (self._stopped sticks True) or stop() is called externally.
-        # A-profile arm (arm_vic) delivers async IRQs from a timer thread
-        # via _pending_irqs; that path must NOT call uc.emu_stop()
-        # cross-thread (deadlocks unicorn). Instead we run arm in bounded
-        # instruction chunks so this (dispatch) thread returns from
-        # emu_start on its own and drains the queue between chunks WITHOUT
-        # a cross-thread emu_stop. Other arches keep the unbounded run
-        # (count=0). Override via HAL_IRQ_CHUNK env var (set to e.g. 50000
-        # when debugging boot where the cold-boot completes in fewer than
-        # 2M insns and you need an earlier drain).
+        # x86 async IRQ delivery (timer thread -> _pending_irqs) must NOT
+        # call uc.emu_stop() cross-thread (deadlocks unicorn). Instead we
+        # run x86 in bounded instruction chunks so this (dispatch) thread
+        # returns from emu_start on its own and drains the queue between
+        # chunks. Other arches keep the unbounded run (count=0).
+        # x86 and A-profile arm (arm_vic) deliver async IRQs from a timer
+        # thread via _pending_irqs; run those in bounded chunks so this
+        # dispatch thread returns from emu_start on its own and drains the
+        # queue WITHOUT a cross-thread emu_stop (which deadlocks unicorn).
+        # ARM/x86 run in bounded chunks so this (dispatch) thread can
+        # check for queued IRQs between chunks. Override via
+        # HAL_IRQ_CHUNK env var (set to e.g. 50000 when debugging boot
+        # where the cold-boot completes in fewer than 2M insns and you
+        # need an earlier drain).
         import os as __os
         _chunk_env = __os.environ.get("HAL_IRQ_CHUNK")
         if _chunk_env:
             irq_chunk = int(_chunk_env, 0)
-        elif self.arch_name == "arm":
+        elif self.arch_name in ("x86", "arm"):
             irq_chunk = 2_000_000
         else:
             irq_chunk = 0
@@ -1026,6 +1487,12 @@ class UnicornBackend(ARMHalMixin, HalBackend):
             except unicorn.UcError as _uc_err:
                 if self._stopped:
                     return  # stopped by breakpoint hook — normal
+                # x86 flat-segment recovery: _intr_hook decoded a far
+                # control transfer and stashed the resume EIP. Re-enter
+                # emu_start at it (read_register("pc") already returns it).
+                if getattr(self, "_x86_resume_eip", None) is not None:
+                    self._x86_resume_eip = None
+                    continue
                 # Bad-call recovery: an indirect call through an unsatisfiable
                 # _func_ hook landed in non-code -> return to lr (the wrapper
                 # set it with `mov lr, pc`). Capped per fault PC.
@@ -1176,10 +1643,15 @@ class UnicornBackend(ARMHalMixin, HalBackend):
                 # fall through to drain queue + re-enter emu_start
                 continue
             # emu_start returned without UcError: same logic as
-            # above — drain pending or honour external stop.
+            # above — drain pending or honour external stop. The x86
+            # flat-segment recovery stops cleanly (emu_stop in the INTR
+            # hook), so check the resume flag here too.
+            if getattr(self, "_x86_resume_eip", None) is not None:
+                self._x86_resume_eip = None
+                continue
             if self._pending_irqs:
                 continue
-            # arm runs in bounded chunks: a clean return means the chunk's
+            # x86 runs in bounded chunks: a clean return means the chunk's
             # instruction count was reached, NOT that emulation is done.
             # Keep running unless a breakpoint/stop() set self._stopped.
             if irq_chunk and not self._stopped:
@@ -1262,13 +1734,13 @@ class UnicornBackend(ARMHalMixin, HalBackend):
             return
         if self._uc is None:
             raise RuntimeError("Call UnicornBackend.init() first")
-        # A-profile arm with a *synthesising* controller (ArmVicController):
-        # the controller's trigger() owns the queue — it appends to
-        # _pending_irqs from the timer thread, and cont() drains it via
-        # _apply_pending_irq -> deliver() in bounded chunks. There is no
-        # controller MMIO to write (the SoC VIC isn't modelled), so just
-        # trigger (queue) and return: do NOT manually append or
-        # cross-thread emu_stop.
+        # A-profile arm with a *synthesising* controller (ArmVicController,
+        # the ARM mirror of X86PicController): the controller's trigger()
+        # owns the queue — it appends to _pending_irqs from the timer
+        # thread, and cont() drains it via _apply_pending_irq -> deliver()
+        # in bounded chunks. There is no controller MMIO to write (the SoC
+        # VIC isn't modelled), so route exactly like x86 and return: just
+        # trigger (queue), do NOT manually append or cross-thread emu_stop.
         if self.arch_name == "arm":
             ctrl = getattr(self, "_irq_controller", None)
             if ctrl is not None and hasattr(ctrl, "deliver"):
@@ -1343,9 +1815,9 @@ class UnicornBackend(ARMHalMixin, HalBackend):
             # GICC_IAR shadow).
             ctrl = getattr(self, "_irq_controller", None)
             if ctrl is not None and hasattr(ctrl, "deliver"):
-                # deliver() returns False when CPSR.I masks IRQs — we
-                # simply drop that tick (the next periodic tick lands
-                # once the firmware re-enables IRQs). We do NOT
+                # deliver() returns False when CPSR.I masks IRQs — like the
+                # x86_pic path we simply drop that tick (the next periodic
+                # tick lands once the firmware re-enables IRQs). We do NOT
                 # re-queue, which would busy-spin this chunk re-applying a
                 # tick that can never enter.
                 ctrl.deliver(self, irq_num)
@@ -1360,6 +1832,19 @@ class UnicornBackend(ARMHalMixin, HalBackend):
             return
         if self.arch_name in ("powerpc", "powerpc:MPC8XX", "ppc64"):
             self._apply_pending_irq_ppc(irq_num)
+            return
+        if self.arch_name == "x86":
+            # x86 PC interrupt delivery is owned entirely by the
+            # configured X86PicController (backends/irq/x86_pic.py): it
+            # synthesises the CPU interrupt frame and vectors to the
+            # VxWorks interrupt stub. This runs on the dispatch thread
+            # (here), so it is safe to mutate EIP/ESP.
+            ctrl = getattr(self, "_irq_controller", None)
+            if ctrl is not None and hasattr(ctrl, "deliver"):
+                ctrl.deliver(self)
+            else:
+                log.warning("inject_irq(%d): x86 has no X86PicController "
+                            "configured; tick dropped", irq_num)
             return
 
         # Vector table offset: caller plumbs it in via set_vtor(); fall
