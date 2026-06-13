@@ -32,6 +32,11 @@ GUARDRAILS:
 - Bound every run (watchdog / VERIFY_SECS). `pkill -9 -f run_cfg` between runs — stray emulators
   silently make boots ~10× slower.
 - Cross-validate a real fault under both --emulator unicorn AND avatar-qemu before modeling past it.
+  (On macOS the qemu binary is Linux-only — iterate in unicorn; see REHOSTING.md "Host environment".)
+- ⚠ FRAMEWORK EDITS: `halucinator` runs from the MAIN checkout's src, NOT your worktree. To patch
+  src/halucinator/* from your worktree, edit your worktree's copy AND prepend it to PYTHONPATH (see
+  p2im-drone/run_cfg.py); prefer env-var hooks. NEVER edit the main checkout's src (it's the user's
+  branch). Read REHOSTING.md "Host environment & gotchas" before touching framework code.
 - PUSH POLICY: <public → may push this branch> | <proprietary → NEVER push; pre-push hook blocks
   private/*; do not use --no-verify>.
 - Firmware binaries are NEVER committed (they're gitignored). For downloaded firmware, commit

@@ -9,7 +9,7 @@ Status: `todo` · `in-progress` · `blocked` · `done`  ·  Milestone: M0–M4
 ## Track A — public benchmark firmware (pushable `feature/rehost-<name>`)
 | Firmware | Bin | Arch / OS (confirm) | Status | Milestone | Agent / Branch / Worktree | Frontier |
 |---|---|---|---|---|---|---|
-| p2im-drone | Drone.elf | ARM Cortex-M / bare-metal | in-progress | M0 | PILOT / `feature/rehost-p2im-drone` / `../hal-rehost-drone` | (kickoff) |
+| p2im-drone | Drone.elf | ARM Cortex-M3 / bare-metal | done | M4 | PILOT (done) / `feature/rehost-p2im-drone` / `../hal-rehost-p2im-drone` | flight loop runs fault-free, MSP telemetry streams (commit 140ee714b5) |
 | cnc-grbl | CNC.bin | ARM Cortex-M / GRBL (open) | todo | — | — | — |
 | console-kinetis | Console.elf | Kinetis / bare-metal | todo | — | — | — |
 | gateway-stm32 | Gateway.elf | STM32 | todo | — | — | — |

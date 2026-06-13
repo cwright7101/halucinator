@@ -67,3 +67,23 @@ cp <source>/<firmware>  ../hal-rehost-<name>/test/firmware-rehosting/<name>/<nam
 - Don't touch other agents' worktrees/branches. Don't modify `integration/post-30-32` or
   `feature/rehost-fleet` themselves — only build on top.
 - No Claude/Anthropic attribution in commits; never stage `CLAUDE.md` / `.claude/`.
+
+## Host environment & gotchas (learned from the p2im-drone pilot — read this)
+- **⚠ Editing framework code from a worktree (the dangerous one).** `halucinator` is `pip install -e`'d
+  from the **MAIN checkout** (`…/halucinator/src`), so the installed command runs the MAIN checkout's
+  `src/` — **not** your worktree's copy. Two consequences: (1) editing your worktree's `src/` has no
+  effect by default; (2) naively "editing the source" can land in the main checkout and **silently
+  mutate `feature/vxworks-arm-rehost`** (a forbidden branch). To patch framework code from your
+  worktree: edit your worktree's own `src/` copy AND prepend it to `PYTHONPATH` so it shadows the
+  install — see `p2im-drone/run_cfg.py` (it prepends `WORKTREE_SRC`). **Never edit the main checkout's
+  `src/`.** Prefer env-var hooks over edits where possible (e.g. the pilot added `HAL_SKIP_SVC=1`).
+- **macOS = unicorn-only.** The built `qemu-system-arm` binaries (`deps/build-qemu/`, `.build-arm/`)
+  are **Linux/aarch64 ELFs** — they can't exec on Darwin. So "cross-validate under avatar-qemu" needs
+  **Docker**, or compare against a pre-existing Linux qemu log. On bare macOS, iterate in unicorn.
+- **Fresh worktrees have empty `deps/` submodules.** That's fine for unicorn work (halucinator runs
+  from the main checkout's install). Only `git submodule update --init` (needs network) if you must
+  build QEMU.
+- **No `timeout(1)` and no `arm-none-eabi-gcc` on this host.** Use a Python wall-clock watchdog
+  (the `run_cfg.py` pattern), and rely on the committed firmware binary — don't try to rebuild it.
+- Some handlers hardcode Docker paths (e.g. `argfile.txt` at `/home/haluser/...`); make paths relative
+  to the handler dir if they bite.
