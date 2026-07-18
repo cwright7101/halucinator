@@ -482,6 +482,25 @@ class UnicornBackend(ARMHalMixin, HalBackend):
         # Log CPU exceptions (unhandled traps, illegal insns, FP faults)
         self._uc.hook_add(unicorn.UC_HOOK_INTR, self._intr_hook)
 
+        # Cortex-M PendSV trigger. RTOS context switches (RIOT
+        # thread_yield_higher, FreeRTOS portYIELD, ...) request a context
+        # switch by setting SCB->ICSR.PENDSVSET (bit 28) at 0xE000ED04. The PPB
+        # is mapped as plain RW memory (above), so that write succeeds but the
+        # generic ARM core never pends the exception. Watch the ICSR word and,
+        # when PENDSVSET is set, queue a PendSV (vector 14) delivered at the
+        # next safe point (between emu chunks, like an IRQ) so the firmware's
+        # OWN isr_pendsv runs and switches threads for real.
+        if self.arch_name == "cortex-m3":
+            self._pendsv_pending = False
+            self._intr_resume = False
+            self._cortexm_in_handler = False
+            self._cortexm_exc_depth = 0
+            self._uc.hook_add(
+                unicorn.UC_HOOK_MEM_WRITE,
+                self._cortexm_icsr_write_hook,
+                None, self._SCB_ICSR, self._SCB_ICSR + 3,
+            )
+
         # x86 uses *port* I/O (the IN/OUT instructions) for the PC chipset
         # — the 8259 PIC, 16550 UART, 8254 PIT, etc. — in addition to
         # memory-mapped I/O. Unicorn delivers those through dedicated
@@ -852,6 +871,20 @@ class UnicornBackend(ARMHalMixin, HalBackend):
                 and pc != -1
                 and self._maybe_handle_exc_return(pc)):
             return  # _maybe_handle_exc_return already called emu_stop
+        # Cortex-M supervisor call (`svc #n`). RTOS kernels (RIOT, FreeRTOS,
+        # Zephyr) start the scheduler and yield via SVC + PendSV: e.g. RIOT's
+        # cpu_switch_context_exit issues `svc #1` to vector into isr_svc, which
+        # restores the first thread's context and EXC_RETURNs into it. The
+        # generic ARM core unicorn boots with does not architecturally vector
+        # M-profile SVC/PendSV to the NVIC vector table, so the trap lands here.
+        # Synthesise the architectural exception entry to vector[11] (SVCall) so
+        # the firmware's OWN handler runs and returns via EXC_RETURN (handled by
+        # _maybe_handle_exc_return). Faithful: no firmware skip, the kernel's
+        # context switch executes for real.
+        if (self.arch_name == "cortex-m3" and not self.skip_svc
+                and pc not in (-1, 0)
+                and self._maybe_handle_cortexm_svc(uc, pc)):
+            return
         # Opt-in recovery: a Thumb SVC (high byte 0xDF) from instrumented
         # firmware (e.g. P2IM aflCall). When the SVC traps, unicorn reports
         # pc at the *next* instruction, so the SVC opcode is at pc or pc-2.
@@ -1586,8 +1619,17 @@ class UnicornBackend(ARMHalMixin, HalBackend):
             # Drain any IRQs queued from another thread before
             # resuming — the synthetic exception frame setup mutates
             # PC/SP, only safe when emu_start is not running.
-            while self._pending_irqs:
-                self._apply_pending_irq(self._pending_irqs.pop(0))
+            # Cortex-M: only deliver a new external IRQ when the CPU is in
+            # Thread mode (no synthetic handler active). We model a single NVIC
+            # priority level, so delivering mid-handler would nest the ISR on
+            # itself and starve the lowest-priority PendSV context switch.
+            # "Thread mode" is detected via _cortexm_in_handler, which an RTOS
+            # context switch (non-LIFO exception return) keeps accurate by
+            # clearing on the EXC_RETURN that lands back on a thread stack.
+            if (self.arch_name != "cortex-m3"
+                    or not getattr(self, "_cortexm_in_handler", False)):
+                while self._pending_irqs:
+                    self._apply_pending_irq(self._pending_irqs.pop(0))
             pc = self.read_register("pc")
             # Unicorn Thumb mode needs the LSB set on the start
             # address.
@@ -1785,6 +1827,25 @@ class UnicornBackend(ARMHalMixin, HalBackend):
             # hook), so check the resume flag here too.
             if getattr(self, "_x86_resume_eip", None) is not None:
                 self._x86_resume_eip = None
+                continue
+            # Cortex-M PendSV requested via SCB->ICSR.PENDSVSET (the ICSR write
+            # hook emu_stop'd us). PendSV is the LOWEST-priority exception, so it
+            # must not nest inside an active handler -- deliver it only once the
+            # CPU is back in thread mode (exception depth 0). Otherwise re-enter
+            # emu_start; the deferred flag stays set and fires on the exc_return
+            # that drops depth to 0.
+            if getattr(self, "_pendsv_pending", False):
+                if not getattr(self, "_cortexm_in_handler", False):
+                    self._pendsv_pending = False
+                    self._deliver_cortexm_pendsv()
+                continue
+            # Cortex-M SVCall / EXC_RETURN handled in _intr_hook stop cleanly
+            # (emu_stop after redirecting PC into the SVC handler / popped
+            # frame). Re-enter emu_start at the new PC rather than bubbling
+            # out to the dispatch loop (which would treat the handler/return
+            # PC as an unhandled stop).
+            if getattr(self, "_intr_resume", False):
+                self._intr_resume = False
                 continue
             if self._pending_irqs:
                 continue
@@ -2000,6 +2061,15 @@ class UnicornBackend(ARMHalMixin, HalBackend):
         # back to 0 for backward compatibility.
         vtor = getattr(self, "_vtor", 0)
         isr_slot = vtor + (16 + irq_num) * 4
+        # Cortex-M external IRQ entry: route through the shared, MSP/PSP-banking
+        # exception-entry helper so an IRQ taken while a thread runs on PSP
+        # stacks the frame on PSP and runs the ISR on MSP (an RTOS depends on
+        # this -- e.g. RIOT's UART0 RX ISR feeds the shell, which had yielded to
+        # a PSP thread). The return address is the current PC.
+        if self.arch_name == "cortex-m3":
+            cur_pc = self.read_register("pc")
+            self._cortexm_exception_entry(isr_slot, cur_pc, "irq%d" % irq_num)
+            return
         isr_addr = 0
         try:
             isr_addr = int.from_bytes(
@@ -2131,6 +2201,128 @@ class UnicornBackend(ARMHalMixin, HalBackend):
         ShadowExceptionDeliverer().deliver(self, irq_num,
                                            self._resolve_delivery_plan(_legacy))
 
+    _EXC_RETURN_THREAD_PSP = 0xFFFFFFFD
+    _SCB_ICSR = 0xE000ED04
+    _ICSR_PENDSVSET = 0x10000000
+
+    def _cortexm_icsr_write_hook(self, uc, access, address, size, value,
+                                 user_data):
+        """Watch SCB->ICSR for PENDSVSET. Queue a PendSV when the firmware
+        requests a context switch. Delivered between emu chunks (cont()),
+        not inline, so PC/SP mutation happens single-threaded."""
+        if (address <= self._SCB_ICSR < address + size
+                and (value & self._ICSR_PENDSVSET)):
+            self._pendsv_pending = True
+            # Break out of emu_start so the dispatch loop in cont() can
+            # synthesise the PendSV entry between chunks (PC/SP mutation is
+            # only safe when emu_start is not running). The write itself still
+            # lands in the PPB-backed ICSR word.
+            try:
+                self._uc.emu_stop()
+            except Exception:  # noqa: BLE001
+                pass
+
+    def _deliver_cortexm_pendsv(self) -> None:
+        """Synthesise a Cortex-M PendSV (vector 14) exception entry, exactly
+        like the SVC entry: push the 8-word frame on the current stack, set
+        LR=EXC_RETURN(thread/MSP), jump to the PendSV vector. The firmware's
+        isr_pendsv saves the outgoing thread, picks the next, and EXC_RETURNs
+        into it (handled by _maybe_handle_exc_return)."""
+        vtor = getattr(self, "_vtor", 0)
+        cur_pc = self.read_register("pc")
+        self._cortexm_exception_entry(14 * 4 + vtor, cur_pc, "PendSV")
+
+    def _cortexm_exception_entry(self, vector_slot: int, return_pc: int,
+                                 label: str) -> bool:
+        """Architecturally-correct Cortex-M exception entry.
+
+        Stacks the 8-word hardware frame on the stack the CPU is *currently*
+        using (PSP if CONTROL.SPSEL=1, i.e. a thread was running; else MSP),
+        computes the matching EXC_RETURN, then switches the handler onto MSP
+        (SPSEL=0) and vectors to the handler. This MSP/PSP banking is what an
+        RTOS context switch depends on: isr_svc/isr_pendsv run on MSP while the
+        outgoing thread's frame sits on its PSP. Returns True on success.
+        """
+        if self._uc is None:
+            return False
+        try:
+            handler = int.from_bytes(
+                self._uc.mem_read(vector_slot, 4), "little")
+        except Exception:  # noqa: BLE001
+            return False
+        if not handler:
+            return False
+        arm = unicorn.arm_const
+        try:
+            control = self._uc.reg_read(arm.UC_ARM_REG_CONTROL)
+        except Exception:  # noqa: BLE001
+            control = 0
+        on_psp = bool(control & 0x2)  # SPSEL
+        regs = {n: self.read_register(n) for n in
+                ("r0", "r1", "r2", "r3", "r12", "lr", "cpsr")}
+        # Frame goes on the active stack (PSP if a thread was running).
+        if on_psp:
+            try:
+                cur_sp = self._uc.reg_read(arm.UC_ARM_REG_PSP)
+            except Exception:  # noqa: BLE001
+                cur_sp = self.read_register("sp")
+        else:
+            cur_sp = self.read_register("sp")
+        sp = cur_sp - 32
+        xpsr = regs["cpsr"] | 0x01000000  # Thumb bit
+        frame = (regs["r0"], regs["r1"], regs["r2"], regs["r3"],
+                 regs["r12"], regs["lr"], return_pc, xpsr)
+        self._uc.mem_write(sp, struct.pack("<8I", *frame))
+        # EXC_RETURN encodes which stack to unwind from on handler return.
+        exc_return = (self._EXC_RETURN_THREAD_PSP if on_psp
+                      else self._EXC_RETURN_THREAD_MSP)
+        if on_psp:
+            # Save the (decremented) PSP; run the handler on MSP (SPSEL=0).
+            try:
+                self._uc.reg_write(arm.UC_ARM_REG_PSP, sp)
+                self._uc.reg_write(arm.UC_ARM_REG_CONTROL, control & ~0x2)
+                msp = self._uc.reg_read(arm.UC_ARM_REG_MSP)
+                self.write_register("sp", msp)
+            except Exception:  # noqa: BLE001
+                self.write_register("sp", sp)
+        else:
+            self.write_register("sp", sp)
+        self.write_register("lr", exc_return)
+        self.write_register("pc", handler & ~1)
+        self._cortexm_exc_depth = getattr(self, "_cortexm_exc_depth", 0) + 1
+        self._cortexm_in_handler = True  # now in Handler mode
+        log.info("cortexm_%s: entry -> handler 0x%x (ret 0x%x, %s, depth=%d)",
+                 label, handler, return_pc, "PSP" if on_psp else "MSP",
+                 self._cortexm_exc_depth)
+        return True
+
+    def _maybe_handle_cortexm_svc(self, uc, pc: int) -> bool:
+        """Synthesise a Cortex-M SVCall exception entry.
+
+        On an `svc #n` trap, unicorn reports PC at the *next* instruction
+        (the SVC opcode is at pc-2 for a 16-bit Thumb SVC). We verify the
+        opcode and vector to the SVCall handler (slot 11) via the shared
+        exception-entry helper (return address = pc, the instruction after the
+        SVC). The firmware's own handler then runs; its eventual `bx lr` to an
+        EXC_RETURN value is unwound by _maybe_handle_exc_return.
+
+        Returns True (and emu_stop's so the dispatch loop re-enters at the
+        handler) when an SVC entry was synthesised, else False.
+        """
+        # Confirm a 16-bit Thumb SVC (0xDF nn) sits just before PC.
+        try:
+            op = bytes(uc.mem_read(pc - 2, 2))
+        except Exception:  # noqa: BLE001
+            return False
+        if len(op) != 2 or op[1] != 0xDF:
+            return False
+        vtor = getattr(self, "_vtor", 0)
+        if not self._cortexm_exception_entry(vtor + 11 * 4, pc, "svc"):
+            return False
+        self._intr_resume = True
+        uc.emu_stop()
+        return True
+
     def _maybe_handle_exc_return(self, addr: int) -> bool:
         """Called from the invalid-fetch hook. If the fetch address looks
         like an EXC_RETURN magic value, pop the exception frame and
@@ -2139,9 +2331,29 @@ class UnicornBackend(ARMHalMixin, HalBackend):
             return False
         if (addr & self._EXC_RETURN_MASK) != self._EXC_RETURN_MAGIC:
             return False
-        import struct
-        sp = self.read_register("sp")
+        # EXC_RETURN low nibble selects which stack the hardware frame is on:
+        #   0x...D -> Thread mode, Process stack (PSP)  (RIOT/RTOS threads)
+        #   0x...9 -> Thread mode, Main stack (MSP)
+        #   0x...1 -> Handler mode, Main stack (MSP)
+        # We bypass unicorn's native exception unwind (our entry was manual),
+        # so read the correct banked SP explicitly and restore it.
+        # NB: the firmware reaches EXC_RETURN via `bx <reg>`, which STRIPS bit0
+        # (the Thumb bit) before the fetch — so 0xFFFFFFFD (Thread/PSP) arrives
+        # here as 0xFFFFFFFC. Match on bits[3:1] ignoring bit0: PSP-thread is
+        # nibble 0xC/0xD, MSP-thread 0x8/0x9, handler 0x0/0x1.
+        use_psp = (addr & 0xE) == 0xC
+        # bit3 of EXC_RETURN selects Thread (1) vs Handler (0) return mode (with
+        # bit0 stripped by bx: nibble 0x8/0x9/0xC/0xD => Thread; 0x0/0x1 =>
+        # Handler). Track it so the IRQ/PendSV gate knows when the CPU is back
+        # in Thread mode (an RTOS context switch makes exception returns
+        # non-LIFO, so a plain depth counter is unreliable).
+        returns_to_thread = bool(addr & 0x8)
         try:
+            if use_psp:
+                psp_reg = unicorn.arm_const.UC_ARM_REG_PSP
+                sp = self._uc.reg_read(psp_reg)
+            else:
+                sp = self.read_register("sp")
             frame = struct.unpack("<8I", bytes(self._uc.mem_read(sp, 32)))
         except Exception:
             return False
@@ -2153,10 +2365,36 @@ class UnicornBackend(ARMHalMixin, HalBackend):
         self.write_register("lr", frame[5])
         self.write_register("pc", frame[6])
         self.write_register("cpsr", frame[7])
-        self.write_register("sp", sp + 32)
-        log.info("exc_return: popped frame, resuming at 0x%x", frame[6])
+        new_sp = sp + 32
+        if use_psp:
+            # Thread now runs on PSP: point both PSP and the active SP at the
+            # popped stack, and set CONTROL.SPSEL=1 so subsequent SP refs use
+            # the process stack (RTOS threads run privileged on PSP).
+            try:
+                self._uc.reg_write(unicorn.arm_const.UC_ARM_REG_PSP, new_sp)
+                ctrl = self._uc.reg_read(unicorn.arm_const.UC_ARM_REG_CONTROL)
+                self._uc.reg_write(unicorn.arm_const.UC_ARM_REG_CONTROL,
+                                   ctrl | 0x2)
+            except Exception:  # noqa: BLE001
+                pass
+        self.write_register("sp", new_sp)
+        depth = getattr(self, "_cortexm_exc_depth", 0)
+        if depth > 0:
+            depth -= 1
+            self._cortexm_exc_depth = depth
+        if returns_to_thread:
+            # Back in Thread mode -> external IRQs / PendSV may be delivered
+            # again. (An RTOS context switch returns into a freshly-scheduled
+            # thread, so this is authoritative even when depth bookkeeping is
+            # out of step.)
+            self._cortexm_in_handler = False
+        log.info("exc_return: EXC_RETURN=0x%08x popped %s frame sp=0x%x, "
+                 "resuming at 0x%x (thread=%s)",
+                 addr, "PSP" if use_psp else "MSP", sp, frame[6],
+                 returns_to_thread)
         # Unicorn needs to restart from the restored PC; stop the current
         # emu_start so our dispatch loop re-issues cont() at the new PC.
+        self._intr_resume = True
         self._uc.emu_stop()
         return True
 
