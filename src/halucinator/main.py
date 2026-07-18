@@ -923,8 +923,9 @@ def _instantiate_peripheral(name: str, memory: Any, db_path: str) -> Any:
     class path (``module.path.ClassName``) is imported directly — letting a
     device-specific model live in its own subpackage (e.g.
     ``peripheral_models.bpv5.*``) without polluting the generic module. A bare
-    name searches the at91 module (At91SysCtrl/At91Emac/At91Dbgu) then the
-    generic module (GenericPeripheral/HaltPeripheral). Returns None if unknown
+    name searches the auto_model module (RecordingPeripheral/AutoPeripheral),
+    the at91 module (At91SysCtrl/At91Emac/At91Dbgu), then the generic module
+    (GenericPeripheral/HaltPeripheral). Returns None if unknown
     (region falls back to plain RAM)."""
     if "." in name:
         import importlib
@@ -934,14 +935,19 @@ def _instantiate_peripheral(name: str, memory: Any, db_path: str) -> Any:
         except ImportError:
             cls = None
     else:
-        from halucinator.peripheral_models import at91, generic
-        cls = (getattr(at91, name, None)
+        from halucinator.peripheral_models import auto_model, at91, generic
+        cls = (getattr(auto_model, name, None)
+               or getattr(at91, name, None)
                or getattr(generic, name, None))
     if cls is None:
         log.warning("Unknown emulate peripheral %r; region %s left as RAM",
                     name, memory.name)
         return None
     kwargs: Dict[str, Any] = {}
+    # The auto-modeling peripherals record their MMIO trace to SQLite so the
+    # offline synthesizer can turn it into a precise model; hand them the path.
+    if name in ("RecordingPeripheral", "AutoPeripheral"):
+        kwargs["db_path"] = db_path
     # Pull peripheral-specific kwargs from the YAML `properties` block
     # (HalMemConfig.properties is the generic per-peripheral dict slot).
     extra = getattr(memory, "properties", None)
@@ -1063,7 +1069,11 @@ def _emulate_with_unicorn_backend(
 
     signal.signal(signal.SIGINT, _sigint)
 
-    log.info("Letting Unicorn Run (direct backend)")
+    # ERROR level so this run-start marker survives the default logging.cfg
+    # (root=ERROR). Under `python -m halucinator.main` this module's logger is
+    # "__main__" (unconfigured -> inherits root=ERROR), so an info() banner is
+    # silently dropped; the auto-modeling run driver keys "booted" off this line.
+    log.error("Letting Unicorn Run (direct backend)")
     try:
         _in_process_dispatch_loop(backend)
     except KeyboardInterrupt:

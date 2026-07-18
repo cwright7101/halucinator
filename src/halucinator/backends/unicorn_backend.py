@@ -842,9 +842,13 @@ class UnicornBackend(ARMHalMixin, HalBackend):
         hist = getattr(self, "_pc_hist", None)
         if not hist:
             return
-        log.info("PC sample (top %d most-executed):", top)
+        # Emit at ERROR so the histogram survives the default logging.cfg
+        # (root=ERROR; the `halucinator.backends.*` logger inherits it). This
+        # is the auto-modeling run's "application code is executing" marker —
+        # opt-in via HAL_PC_SAMPLE, so it is silent in normal runs.
+        log.error("PC sample (top %d most-executed):", top)
         for pc, n in hist.most_common(top):
-            log.info("  0x%08x  x%d", pc, n)
+            log.error("  0x%08x  x%d", pc, n)
 
     def _intr_hook(self, uc, intno, user_data):
         try:
