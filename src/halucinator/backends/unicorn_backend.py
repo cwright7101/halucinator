@@ -270,6 +270,20 @@ class UnicornBackend(ARMHalMixin, HalBackend):
         # an observe-only (non-intercept) bp_handler so the real function runs.
         self._skip_bp_once: Optional[int] = None
         self._breakpoints: Dict[int, int] = {}   # addr → bp_id
+        # Fast-breakpoint mode (opt-in HAL_FAST_BP=1): instead of ONE global
+        # per-instruction UC_HOOK_CODE that checks every PC against the
+        # breakpoint set (a Python callback on every instruction, which
+        # dominates runtime for compute-heavy firmware), install one
+        # RANGE-BOUNDED UC_HOOK_CODE per breakpoint address. Unicorn filters the
+        # hook range in C at translate time, so basic blocks containing no
+        # breakpoint run at full JIT speed and never enter Python. Arch-agnostic
+        # and off by default -- eligibility is finalised in init() (it is only
+        # safe when no per-instruction feature LIVES INSIDE _code_hook, i.e. the
+        # RAM-spin breaker and the non-MMIO loop-recover are both off).
+        import os as _os0
+        self._fast_bp = _os0.environ.get("HAL_FAST_BP") == "1"
+        self._fast_bp_active = False
+        self._per_bp_hooks: Dict[int, Any] = {}   # addr → unicorn hook handle
         # RAM-flag spin breaker (opt-in, see _code_hook / _break_ram_spin).
         # Detect a spin by DISTINCT-PC count over a window: a tight loop (even
         # one spanning a function call) touches few distinct PCs, while real
@@ -487,11 +501,30 @@ class UnicornBackend(ARMHalMixin, HalBackend):
                     "UnicornBackend: PPB auto-map skipped (%s)", exc,
                 )
 
-        # Global hook to detect breakpoint hits and stop execution
-        self._uc.hook_add(
-            unicorn.UC_HOOK_CODE,
-            self._code_hook,
-        )
+        # Breakpoint detection. Default: ONE global per-instruction UC_HOOK_CODE
+        # checks every PC against the breakpoint set. With HAL_FAST_BP=1 and no
+        # per-instruction feature living inside _code_hook (the RAM-spin breaker
+        # and the non-MMIO loop-recover, both opt-in and off by default), install
+        # one range-bounded hook per breakpoint instead -- blocks with no
+        # breakpoint then run at full JIT speed (see set_breakpoint / __init__).
+        self._fast_bp_active = (
+            self._fast_bp
+            and not self._break_ram_spins
+            and not getattr(self, "auto_recover_loops", False))
+        if self._fast_bp_active:
+            for _bp_addr in list(self._breakpoints):
+                self._install_bp_hook(_bp_addr)
+            log.info("UnicornBackend: HAL_FAST_BP -- per-address breakpoint "
+                     "hooks (no global per-instruction code hook)")
+        else:
+            if self._fast_bp:
+                log.warning("UnicornBackend: HAL_FAST_BP ignored -- a per-"
+                            "instruction _code_hook feature is active "
+                            "(HAL_BREAK_RAM_SPINS/auto_recover_loops)")
+            self._uc.hook_add(
+                unicorn.UC_HOOK_CODE,
+                self._code_hook,
+            )
         # Log unmapped / invalid memory accesses so test firmware crashes
         # produce useful diagnostics instead of opaque UC_ERR_* strings.
         self._uc.hook_add(
@@ -1574,18 +1607,36 @@ class UnicornBackend(ARMHalMixin, HalBackend):
     # Execution control
     # ------------------------------------------------------------------
 
+    def _install_bp_hook(self, addr: int) -> None:
+        """Fast-bp mode: install a range-bounded UC_HOOK_CODE for one breakpoint
+        address so Unicorn only enters _code_hook at that PC (blocks elsewhere
+        run at full JIT speed). No-op unless the engine is up."""
+        a = addr & 0xFFFFFFFE
+        if self._uc is None or a in self._per_bp_hooks:
+            return
+        self._per_bp_hooks[a] = self._uc.hook_add(
+            unicorn.UC_HOOK_CODE, self._code_hook, begin=a, end=a)
+
     def set_breakpoint(self, addr: int, hardware: bool = False,
                        temporary: bool = False) -> int:
         bp_id = self._next_bp_id
         self._next_bp_id += 1
         # Store with Thumb bit cleared for comparison in _code_hook
         self._breakpoints[addr & 0xFFFFFFFE] = bp_id
+        if self._fast_bp_active:
+            self._install_bp_hook(addr)
         return bp_id
 
     def remove_breakpoint(self, bp_id: int) -> None:
         to_remove = [a for a, bid in self._breakpoints.items() if bid == bp_id]
         for addr in to_remove:
             del self._breakpoints[addr]
+            h = self._per_bp_hooks.pop(addr, None)
+            if h is not None:
+                try:
+                    self._uc.hook_del(h)
+                except Exception:  # noqa: BLE001
+                    pass
 
     def set_watchpoint(self, addr: int, write: bool = True,
                        read: bool = False, size: int = 4) -> int:

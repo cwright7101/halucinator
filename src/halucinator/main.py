@@ -957,7 +957,17 @@ def _instantiate_peripheral(name: str, memory: Any, db_path: str) -> Any:
     except Exception:  # noqa: BLE001
         _records = name in ("RecordingPeripheral", "AutoPeripheral")
     if _records:
-        kwargs["db_path"] = db_path
+        # HAL_NO_MMIO_TRACE=1 disables the per-access SQLite mmio_trace recording
+        # for THROUGHPUT runs. The trace is a DIAGNOSTIC (input to the offline
+        # halucinator.automodel.synthesize); recording it writes a DB row on every
+        # unmodeled MMIO read/write, which dominates runtime during MMIO-heavy
+        # firmware phases (dense status-register polls) and bloats the DB to
+        # hundreds of MB. Disabling it does NOT change emulation behaviour -- the
+        # peripheral's hw_read/hw_write (spin-breaker, counters, models) still run
+        # identically; only the observation is skipped. Off by default (recording
+        # stays on for normal auto-modeling runs).
+        kwargs["db_path"] = (
+            None if os.environ.get("HAL_NO_MMIO_TRACE") == "1" else db_path)
     # Pull peripheral-specific kwargs from the YAML `properties` block
     # (HalMemConfig.properties is the generic per-peripheral dict slot).
     extra = getattr(memory, "properties", None)
