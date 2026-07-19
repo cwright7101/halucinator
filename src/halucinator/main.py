@@ -946,7 +946,17 @@ def _instantiate_peripheral(name: str, memory: Any, db_path: str) -> Any:
     kwargs: Dict[str, Any] = {}
     # The auto-modeling peripherals record their MMIO trace to SQLite so the
     # offline synthesizer can turn it into a precise model; hand them the path.
-    if name in ("RecordingPeripheral", "AutoPeripheral"):
+    # This applies to the bare-named RecordingPeripheral/AutoPeripheral AND to
+    # any device-specific subclass referenced by a fully-qualified path (so a
+    # model that extends AutoPeripheral to special-case a few registers still
+    # produces the trace for the untouched ones).
+    _records = False
+    try:
+        from halucinator.peripheral_models.auto_model import RecordingPeripheral
+        _records = isinstance(cls, type) and issubclass(cls, RecordingPeripheral)
+    except Exception:  # noqa: BLE001
+        _records = name in ("RecordingPeripheral", "AutoPeripheral")
+    if _records:
         kwargs["db_path"] = db_path
     # Pull peripheral-specific kwargs from the YAML `properties` block
     # (HalMemConfig.properties is the generic per-peripheral dict slot).
