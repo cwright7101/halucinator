@@ -1839,6 +1839,19 @@ class UnicornBackend(ARMHalMixin, HalBackend):
             # emu_start; the deferred flag stays set and fires on the exc_return
             # that drops depth to 0.
             if getattr(self, "_pendsv_pending", False):
+                # The ICSR write hook emu_stop'd us with PC PARKED on the
+                # `str ICSR,PENDSVSET` store (unicorn aborts the faulting
+                # instruction). Retire that store first -- single-step one
+                # instruction so PC advances PAST it -- BEFORE we snapshot the
+                # preempted context. On real HW the store retires and the CPU
+                # takes PendSV at the NEXT instruction boundary; if we instead
+                # snapshot with PC still on the store, the preempted thread
+                # resumes ON the store, re-writes PENDSVSET and re-pends PendSV
+                # forever (an infinite context-switch ping-pong). The write
+                # hook's already-pending guard keeps this step from re-breaking.
+                if getattr(self, "_pendsv_store_parked", False):
+                    self._pendsv_store_parked = False
+                    self._cortexm_step_one()
                 if not getattr(self, "_cortexm_in_handler", False):
                     self._pendsv_pending = False
                     self._deliver_cortexm_pendsv()
@@ -2216,15 +2229,48 @@ class UnicornBackend(ARMHalMixin, HalBackend):
         not inline, so PC/SP mutation happens single-threaded."""
         if (address <= self._SCB_ICSR < address + size
                 and (value & self._ICSR_PENDSVSET)):
+            already_pending = self._pendsv_pending
             self._pendsv_pending = True
-            # Break out of emu_start so the dispatch loop in cont() can
+            # Break out of emu_start ONCE so the dispatch loop in cont() can
             # synthesise the PendSV entry between chunks (PC/SP mutation is
             # only safe when emu_start is not running). The write itself still
             # lands in the PPB-backed ICSR word.
-            try:
-                self._uc.emu_stop()
-            except Exception:  # noqa: BLE001
-                pass
+            #
+            # Critical: emu_stop() aborts the CURRENT instruction and leaves PC
+            # parked on the `str ICSR, PENDSVSET` store. If PENDSVSET is set
+            # while the CPU is in a handler (e.g. RIOT's UART RX ISR calling
+            # thread_yield_higher), cont() must DEFER PendSV until the CPU is
+            # back in Thread mode — but re-entering emu_start at the still-parked
+            # store re-fires this very hook and re-stops, spinning forever on the
+            # store so the ISR never returns and the context switch never lands.
+            # So only emu_stop the first time we see the pending request; on the
+            # deferred re-entry (already_pending) let the store COMPLETE and PC
+            # advance, so the handler runs on to its EXC_RETURN. The deferred
+            # PendSV is then delivered by cont() once exc_return drops the CPU
+            # back to Thread mode.
+            if not already_pending:
+                self._pendsv_store_parked = True
+                try:
+                    self._uc.emu_stop()
+                except Exception:  # noqa: BLE001
+                    pass
+
+    def _cortexm_step_one(self) -> None:
+        """Execute exactly one instruction from the current PC.
+
+        Used to retire a PENDSVSET store the ICSR write hook parked PC on
+        (emu_stop aborts the faulting instruction, leaving PC on it). The
+        hook's already-pending guard prevents this single step from being
+        re-broken by the same store's write hook."""
+        if self._uc is None:
+            return
+        pc = self.read_register("pc")
+        start = (pc | 1) if self._is_thumb else pc
+        until = (1 << (self._word_size * 8)) - 1
+        try:
+            self._uc.emu_start(start, until, timeout=0, count=1)
+        except unicorn.UcError:
+            pass
 
     def _deliver_cortexm_pendsv(self) -> None:
         """Synthesise a Cortex-M PendSV (vector 14) exception entry, exactly
