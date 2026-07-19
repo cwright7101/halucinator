@@ -314,6 +314,27 @@ class UnicornBackend(ARMHalMixin, HalBackend):
         # handler). cont() drains the queue before re-entering emu_start
         # so the synthetic exception frame is set up single-threaded.
         self._pending_irqs: List[int] = []
+        # ARM (A-profile) GICv2 CPU-interface model state. Set only when a
+        # DeliveryPlan with a gicc_base is attached (see set_delivery_plan).
+        # `_gicc_iar_pending` holds the IRQ id an ArmExceptionDeliverer just
+        # acknowledged; the modelled GICC_IAR read returns it exactly once
+        # (then the GICv2 spurious id 1023), so the firmware's GIC ISR reads
+        # the right interrupt number instead of the AutoPeripheral catch-all's
+        # default 0. Untouched on cortex-m / x86 (no gicc_base) — see the
+        # A-profile gate in set_delivery_plan.
+        self._gicc_iar_pending: Optional[int] = None
+        self._gicc_active_irq: Optional[int] = None
+        self._gicc_iface_base: Optional[int] = None
+        # IRQ ids the firmware has enabled in the GIC distributor
+        # (GICD_ISENABLER writes). Used to gate the deterministic system-tick
+        # (HAL_DET_TICK): a real GIC never delivers a line the firmware has
+        # not enabled, so injecting the tick before the boot programs
+        # GICD_ISENABLER would fire the ISR during GIC/exception bring-up —
+        # before the timer is connected and the scheduler exists — and derail
+        # the boot. Populated only when the GIC distributor base is known
+        # (set_delivery_plan); empty => gating disabled (back-compat).
+        self._gic_enabled_irqs: set = set()
+        self._gic_dist_base: Optional[int] = None
         # x86: when _intr_hook resolves a far control transfer (#GP from a
         # missing GDT), it stashes the resume EIP here so cont() re-enters
         # emu_start instead of aborting on the UcError. None when idle.
@@ -1876,7 +1897,17 @@ class UnicornBackend(ARMHalMixin, HalBackend):
                 if self._det_irq is not None:
                     self._det_chunks += 1
                     if self._det_chunks % self._det_period == 0:
-                        self._pending_irqs.append(self._det_irq)
+                        # Gate on GIC enable state when we're modelling the
+                        # distributor: a real GIC won't deliver a line the
+                        # firmware hasn't enabled. Injecting the tick during
+                        # GIC/exception bring-up (before GICD_ISENABLER) fires
+                        # the ISR before the timer + scheduler exist and
+                        # derails the boot. When the distributor base is
+                        # unknown (_gic_dist_base is None) we don't gate, so
+                        # non-GIC / legacy configs are unaffected.
+                        if (self._gic_dist_base is None
+                                or self._det_irq in self._gic_enabled_irqs):
+                            self._pending_irqs.append(self._det_irq)
                 continue
             return
 
@@ -1931,6 +1962,104 @@ class UnicornBackend(ARMHalMixin, HalBackend):
 
     def irq_enable_bp(self, irq_num: int = 1) -> None:
         return None
+
+    def set_delivery_plan(self, plan: Any) -> None:
+        """Attach the DeliveryPlan and, on A-profile ARM with a GICv2
+        CPU-interface base, install the modelled GICC_IAR / GICC_EOIR
+        registers.
+
+        The in-process backend has no real GIC CPU interface: the firmware's
+        IRQ handler reads GICC_IAR to learn which interrupt fired, but an
+        AutoPeripheral catch-all mapping that address returns its default
+        (0), so the handler dispatches the wrong (or no) ISR and never runs
+        the timer tick — the scheduler is never entered. Here we model just
+        the two CPU-interface registers the acknowledge/EOI handshake needs:
+
+          * GICC_IAR  (base+0x0C) read  -> the IRQ id the deliverer just
+            acknowledged (``_gicc_iar_pending``), returned exactly once, then
+            the GICv2 spurious id 1023 (0x3FF). Reads with nothing pending
+            (e.g. early GIC bring-up draining spurious interrupts) therefore
+            correctly see 1023, never a phantom interrupt.
+          * GICC_EOIR (base+0x10) write -> end-of-interrupt: clears the
+            active id.
+
+        These hooks register AFTER the per-region MMIO hooks (init() maps the
+        regions first; _wire_irq calls this later), so on an overlapping
+        AutoPeripheral range this hook fires last and its value wins.
+
+        Gated to A-profile ARM with a gicc_base: cortex-m (NVIC) and x86
+        (PIC) never carry a gicc_base, so this is a no-op for them. arm64 is
+        included for symmetry (same GICv2 CPU interface).
+        """
+        super().set_delivery_plan(plan)
+        gicc_base = getattr(plan, "gicc_base", None) if plan is not None else None
+        if (gicc_base is None or self._uc is None
+                or self.arch_name not in ("arm", "arm64")):
+            return
+        if self._gicc_iface_base == gicc_base:
+            return  # already installed for this base
+        self._gicc_iface_base = gicc_base
+        _IAR = gicc_base + 0x0C
+        _EOIR = gicc_base + 0x10
+        _GICV2_SPURIOUS = 0x3FF
+
+        def _iar_read(uc, access, addr, size, value, user_data):
+            pend = self._gicc_iar_pending
+            if pend is not None:
+                self._gicc_iar_pending = None
+                self._gicc_active_irq = pend
+                val = pend & 0xFFFFFFFF
+            else:
+                val = _GICV2_SPURIOUS
+            try:
+                uc.mem_write(addr, val.to_bytes(size, "little"))
+            except Exception:  # noqa: BLE001
+                pass
+
+        def _eoir_write(uc, access, addr, size, value, user_data):
+            self._gicc_active_irq = None
+
+        self._uc.hook_add(unicorn.UC_HOOK_MEM_READ, _iar_read,
+                          begin=_IAR, end=_IAR + 3)
+        self._uc.hook_add(unicorn.UC_HOOK_MEM_WRITE, _eoir_write,
+                          begin=_EOIR, end=_EOIR + 3)
+        log.info("UnicornBackend: modelled GICv2 CPU interface at 0x%08x "
+                 "(IAR=0x%08x, EOIR=0x%08x)", gicc_base, _IAR, _EOIR)
+
+        # Track GICD_ISENABLER / ICENABLER writes so the deterministic tick
+        # only fires once the firmware has enabled that IRQ line (see
+        # _gic_enabled_irqs). The distributor base comes from the configured
+        # GicController. GICD_ISENABLER<n> is at gicd_base+0x100+n*4 (32 IRQs
+        # per word); ICENABLER<n> at +0x180+n*4.
+        ctrl = getattr(self, "_irq_controller", None)
+        gicd_base = getattr(ctrl, "gicd_base", None) if ctrl is not None else None
+        if gicd_base is not None:
+            self._gic_dist_base = gicd_base
+            _ISEN0 = gicd_base + 0x100
+            _ICEN0 = gicd_base + 0x180
+
+            def _isenabler_write(uc, access, addr, size, value, user_data):
+                idx = (addr - _ISEN0) // 4
+                base = idx * 32
+                v = value & 0xFFFFFFFF
+                for b in range(32):
+                    if v & (1 << b):
+                        self._gic_enabled_irqs.add(base + b)
+
+            def _icenabler_write(uc, access, addr, size, value, user_data):
+                idx = (addr - _ICEN0) // 4
+                base = idx * 32
+                v = value & 0xFFFFFFFF
+                for b in range(32):
+                    if v & (1 << b):
+                        self._gic_enabled_irqs.discard(base + b)
+
+            # Cover ISENABLER0..3 / ICENABLER0..3 (IRQs 0..127 — SGIs, PPIs
+            # and the first SPIs, which is all a small SoC uses).
+            self._uc.hook_add(unicorn.UC_HOOK_MEM_WRITE, _isenabler_write,
+                              begin=_ISEN0, end=_ISEN0 + 0x10 - 1)
+            self._uc.hook_add(unicorn.UC_HOOK_MEM_WRITE, _icenabler_write,
+                              begin=_ICEN0, end=_ICEN0 + 0x10 - 1)
 
     def inject_irq(self, irq_num: int) -> None:
         """Deliver an external IRQ.
