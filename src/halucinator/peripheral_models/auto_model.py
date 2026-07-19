@@ -155,6 +155,43 @@ class AutoPeripheral(RecordingPeripheral):
         if self._counter_addrs:
             hlog.info("AutoPeripheral: free-running counter regs: %s",
                       ", ".join("0x%08x" % a for a in sorted(self._counter_addrs)))
+
+        # 64-bit free-running counter PAIRS. A single 64-bit up-counter exposed
+        # as two 32-bit MMIO registers (low word + high word) -- e.g. the
+        # Cortex-A9 MPCore global timer at PERIPHBASE+0x200(lo)/+0x204(hi). A
+        # 64-bit reader typically loops `do { hi1=HI; lo=LO; hi2=HI; } while
+        # (hi1 != hi2)`, so the HIGH word must be STABLE across consecutive
+        # reads (advancing ONLY when the low word overflows) or the loop never
+        # converges -- a plain per-address counter (which changes every read)
+        # or the spin heuristic (which escalates to changing values) both leave
+        # hi1 != hi2 forever. Declare via HAL_AUTO_COUNTER64_ADDRS="0xLO:0xHI"
+        # (comma-separated; a bare "0xLO" implies HI=LO+4). A LOW read advances
+        # the shared 64-bit accumulator by HAL_AUTO_COUNTER_STEP and returns
+        # bits[31:0]; a HIGH read returns bits[63:32] WITHOUT advancing.
+        # Generic MMIO behaviour (arch-agnostic), opt-in, default off.
+        self._counter64_lo: Dict[int, int] = {}   # lo addr -> lo addr (pair id)
+        self._counter64_hi: Dict[int, int] = {}   # hi addr -> lo addr
+        self._counter64_val: Dict[int, int] = {}   # lo addr -> 64-bit accumulator
+        for tok in _os.environ.get("HAL_AUTO_COUNTER64_ADDRS", "").split(","):
+            tok = tok.strip()
+            if not tok:
+                continue
+            try:
+                if ":" in tok:
+                    lo_s, hi_s = tok.split(":", 1)
+                    lo, hi = int(lo_s, 0), int(hi_s, 0)
+                else:
+                    lo = int(tok, 0)
+                    hi = lo + 4
+            except ValueError:
+                log.warning("bad HAL_AUTO_COUNTER64_ADDRS token %r", tok)
+                continue
+            self._counter64_lo[lo] = lo
+            self._counter64_hi[hi] = lo
+        if self._counter64_hi:
+            hlog.info("AutoPeripheral: 64-bit counter pairs (hi/lo): %s",
+                      ", ".join("0x%08x/0x%08x" % (hi, lo)
+                                for hi, lo in sorted(self._counter64_hi.items())))
         # addr -> accumulated printable output bytes
         self._out: Dict[int, bytearray] = {}
         # HAL_MMIO_LOG=1: log the FIRST read of each (pc,addr) hardware register
@@ -171,6 +208,19 @@ class AutoPeripheral(RecordingPeripheral):
         addr = self.address + offset
         self._record(pc, addr, size, 0, "r")
         key = (pc, addr)
+
+        # 64-bit free-running counter pair (see __init__): the LOW word advances
+        # the shared accumulator and returns bits[31:0]; the HIGH word returns
+        # bits[63:32] WITHOUT advancing, so a 64-bit read-consistency loop
+        # (hi1==hi2) converges.
+        if addr in self._counter64_lo:
+            lo = self._counter64_lo[addr]
+            cur = self._counter64_val.get(lo, 0) + self._counter_step
+            self._counter64_val[lo] = cur
+            return cur & self._mask(size)
+        if addr in self._counter64_hi:
+            lo = self._counter64_hi[addr]
+            return (self._counter64_val.get(lo, 0) >> 32) & self._mask(size)
 
         # Free-running counter register: monotonically increasing every read.
         if addr in self._counter_addrs:
