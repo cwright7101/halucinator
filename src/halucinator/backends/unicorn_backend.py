@@ -638,6 +638,29 @@ class UnicornBackend(ARMHalMixin, HalBackend):
             except Exception:  # noqa: BLE001
                 self._det_irq = None
 
+        # Wall-clock BACKSTOP for the deterministic system-tick pacer
+        # (A-profile / GIC only).  The instruction-count pacer above only
+        # advances _det_chunks on an emu_start chunk that completes WITHOUT a
+        # breakpoint; a device whose models intercept very frequently (e.g. a
+        # VxWorks semTake / objVerifiedSafe model hit on every kernel-object op,
+        # or a busy-polling network daemon) truncates almost every chunk, so
+        # _det_chunks never advances and the RTOS system tick effectively STOPS
+        # -- taskDelay()/tick-driven waits then hang forever even though the
+        # emulator is still executing.  A real hardware timer fires regardless
+        # of what code runs, so when the pacer is active and its IRQ is GIC-
+        # enabled we ALSO queue the tick after HAL_DET_TICK_WALL_MS of wall time
+        # since the last one.  This is a backstop: on a clean run the chunk-
+        # completion path fires first and refreshes the timestamp, keeping the
+        # common case instruction-deterministic; only under bp starvation does
+        # the wall clock take over.  cortex-m (NVIC, no gicd_base) / x86 are
+        # unaffected (the backstop is gated on _gic_dist_base being set).
+        self._det_last_wall = None
+        try:
+            self._det_wall_s = max(0.0, float(
+                _os.environ.get("HAL_DET_TICK_WALL_MS", "10")) / 1000.0)
+        except Exception:  # noqa: BLE001
+            self._det_wall_s = 0.010
+
         # Diagnostic: HAL_LAST_PC=1 keeps a ring of the last basic-block start PCs
         # (low per-block overhead) so that on a UcError the code path leading INTO
         # the fault can be dumped -- essential when the faulting transfer is a
@@ -1641,6 +1664,24 @@ class UnicornBackend(ARMHalMixin, HalBackend):
         else:
             irq_chunk = 0
         while True:
+            # Wall-clock backstop for the deterministic tick pacer: keep the
+            # RTOS system tick alive even when dense breakpoints truncate every
+            # instruction chunk (see __init__).  Runs at the top of the loop --
+            # a clean instruction boundary (fresh entry, or a re-entry right
+            # after a bp) -- so queuing the tick here is as safe as the
+            # chunk-completion path.  A-profile / GIC only, and only once the
+            # firmware has enabled the tick IRQ line.
+            if (self._det_irq is not None and self._gic_dist_base is not None
+                    and self._det_wall_s > 0.0
+                    and self._det_irq in self._gic_enabled_irqs):
+                import time as _dt_time
+                _now_wall = _dt_time.monotonic()
+                if self._det_last_wall is None:
+                    self._det_last_wall = _now_wall
+                elif (_now_wall - self._det_last_wall >= self._det_wall_s
+                        and self._det_irq not in self._pending_irqs):
+                    self._det_last_wall = _now_wall
+                    self._pending_irqs.append(self._det_irq)
             # Drain any IRQs queued from another thread before
             # resuming — the synthetic exception frame setup mutates
             # PC/SP, only safe when emu_start is not running.
@@ -1897,6 +1938,15 @@ class UnicornBackend(ARMHalMixin, HalBackend):
                 if self._det_irq is not None:
                     self._det_chunks += 1
                     if self._det_chunks % self._det_period == 0:
+                        # A clean chunk completed and is about to fire the tick
+                        # -- refresh the wall-clock backstop so it stays quiet
+                        # while chunks keep completing (deterministic path wins).
+                        if self._gic_dist_base is not None:
+                            try:
+                                import time as _dt_time2
+                                self._det_last_wall = _dt_time2.monotonic()
+                            except Exception:  # noqa: BLE001
+                                pass
                         # Gate on GIC enable state when we're modelling the
                         # distributor: a real GIC won't deliver a line the
                         # firmware hasn't enabled. Injecting the tick during
