@@ -1857,6 +1857,15 @@ class UnicornBackend(ARMHalMixin, HalBackend):
             else:
                 data = {"context": self._uc.context_save()}
             data["mem"] = mem
+            # core-patches deterministic tick pacer (_det_irq/_period/_chunks):
+            # a runtime RTOS scheduler-clock driven from cont(), NOT part of the
+            # uc context. Without persisting it a restored machine resumes with
+            # the system tick frozen (the scheduler never advances). Save it when
+            # armed so restore resumes ticking exactly as the live run did.
+            if getattr(self, "_det_irq", None) is not None:
+                data["det_pacer"] = {"irq": self._det_irq,
+                                     "period": self._det_period,
+                                     "chunks": self._det_chunks}
         except SnapshotError:
             raise
         except Exception as exc:  # noqa: BLE001
@@ -1899,6 +1908,16 @@ class UnicornBackend(ARMHalMixin, HalBackend):
                 context = data.get("context")
                 if context is not None:
                     self._uc.context_restore(context)
+            # Restore the deterministic tick pacer so the RTOS system clock
+            # resumes (see save_state). Backend runtime state, not uc context.
+            pacer = data.get("det_pacer")
+            if pacer is not None:
+                self._det_irq = pacer.get("irq")
+                self._det_period = pacer.get("period", 0)
+                self._det_chunks = pacer.get("chunks", 0)
+                log.error("restore_state: re-armed deterministic tick pacer "
+                          "(IRQ %s, period %s) from snapshot",
+                          self._det_irq, self._det_period)
         except Exception as exc:  # noqa: BLE001
             log.error("UnicornBackend.restore_state failed: %r", exc)
             return False

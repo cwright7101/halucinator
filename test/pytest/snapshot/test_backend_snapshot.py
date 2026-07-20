@@ -333,3 +333,40 @@ class TestUnicornArmVfpFpexc:
         uc.emu_start(code, code + 4, count=1)
         # sp decremented by 8 (one 64-bit d-reg pushed) proves it ran as VFP.
         assert uc.reg_read(A.UC_ARM_REG_SP) == RAM_BASE + 0x4000 - 8
+
+
+# ---------------------------------------------------------------------------
+# core-patches deterministic tick pacer must survive a portable snapshot.
+# ---------------------------------------------------------------------------
+
+@pytestmark_uc
+class TestUnicornDetPacer:
+    """The deterministic tick pacer (_det_irq/_det_period/_det_chunks) is backend
+    runtime state driven from cont(), NOT part of the uc context. Without
+    persisting it a restored machine resumes with the RTOS system tick frozen
+    (the scheduler never advances). Regression: a portable snapshot round-trips
+    the pacer when armed, and writes nothing when disarmed (cold-boot-safe)."""
+
+    def _mk(self, monkeypatch):
+        monkeypatch.setenv("HAL_ARM_CPU_MODEL", "UC_CPU_ARM_CORTEX_A9")
+        from halucinator.backends.unicorn_backend import UnicornBackend
+        b = UnicornBackend(arch="arm")
+        b.add_memory_region(MemoryRegion("ram", RAM_BASE, RAM_SIZE, "rwx"))
+        b.init()
+        return b
+
+    def test_armed_pacer_round_trips(self, monkeypatch):
+        b = self._mk(monkeypatch)
+        b._det_irq, b._det_period, b._det_chunks = 27, 3, 5
+        snap = b.save_state(portable=True)
+        assert snap.data["det_pacer"] == {"irq": 27, "period": 3, "chunks": 5}
+        b2 = self._mk(monkeypatch)
+        assert b2._det_irq is None            # fresh backend: disarmed
+        assert b2.restore_state(snap) is True
+        assert (b2._det_irq, b2._det_period, b2._det_chunks) == (27, 3, 5)
+
+    def test_disarmed_pacer_not_persisted(self, monkeypatch):
+        b = self._mk(monkeypatch)
+        assert b._det_irq is None
+        snap = b.save_state(portable=True)
+        assert "det_pacer" not in snap.data   # cold-boot-safe: no spurious arm
