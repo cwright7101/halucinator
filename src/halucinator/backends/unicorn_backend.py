@@ -1866,6 +1866,13 @@ class UnicornBackend(ARMHalMixin, HalBackend):
                 data["det_pacer"] = {"irq": self._det_irq,
                                      "period": self._det_period,
                                      "chunks": self._det_chunks}
+            # A-profile GIC enabled-IRQ set (firmware-written via GICD_ISENABLER):
+            # runtime state the tick pacer gates on for delivery, NOT in the uc
+            # context. Without it a restored machine has no enabled interrupt
+            # lines, so the system tick never delivers and the scheduler idles.
+            _gic_en = getattr(self, "_gic_enabled_irqs", None)
+            if _gic_en:
+                data["gic_enabled_irqs"] = sorted(_gic_en)
         except SnapshotError:
             raise
         except Exception as exc:  # noqa: BLE001
@@ -1918,6 +1925,13 @@ class UnicornBackend(ARMHalMixin, HalBackend):
                 log.error("restore_state: re-armed deterministic tick pacer "
                           "(IRQ %s, period %s) from snapshot",
                           self._det_irq, self._det_period)
+            gic_en = data.get("gic_enabled_irqs")
+            if gic_en is not None and hasattr(self, "_gic_enabled_irqs"):
+                self._gic_enabled_irqs = set(gic_en)
+                # the wall-clock pacer needs a fresh baseline so the first tick
+                # queues promptly rather than at a stale monotonic() delta.
+                if hasattr(self, "_det_last_wall"):
+                    self._det_last_wall = None
         except Exception as exc:  # noqa: BLE001
             log.error("UnicornBackend.restore_state failed: %r", exc)
             return False

@@ -365,6 +365,19 @@ class TestUnicornDetPacer:
         assert b2.restore_state(snap) is True
         assert (b2._det_irq, b2._det_period, b2._det_chunks) == (27, 3, 5)
 
+    def test_gic_enabled_irqs_round_trip(self, monkeypatch):
+        """The GIC enabled-IRQ set (firmware-written) must survive too, else the
+        restored pacer has no enabled line to deliver on and the scheduler idles."""
+        b = self._mk(monkeypatch)
+        b._det_irq = 27
+        b._gic_enabled_irqs = {27, 29, 30}
+        snap = b.save_state(portable=True)
+        assert snap.data["gic_enabled_irqs"] == [27, 29, 30]
+        b2 = self._mk(monkeypatch)
+        assert b2._gic_enabled_irqs == set()  # fresh backend: no enabled lines
+        assert b2.restore_state(snap) is True
+        assert b2._gic_enabled_irqs == {27, 29, 30}
+
     def test_disarmed_pacer_not_persisted(self, monkeypatch):
         b = self._mk(monkeypatch)
         assert b._det_irq is None
