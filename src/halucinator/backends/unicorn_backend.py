@@ -443,12 +443,20 @@ class UnicornBackend(ARMHalMixin, HalBackend):
         # initialisation. Pin the CPU model to Cortex-M3 so unicorn uses
         # the M-profile decoder.
         if self.arch_name == "cortex-m3":
+            # Default Cortex-M3, but allow pinning a richer M-profile core via
+            # HAL_CORTEXM_CPU_MODEL=UC_CPU_ARM_CORTEX_M4 (adds the DSP extension
+            # — e.g. smulbb — that M4 firmware like the STM32WB uses) or _M7/_M33.
+            import os as _os
+            _m_name = _os.environ.get("HAL_CORTEXM_CPU_MODEL",
+                                      "UC_CPU_ARM_CORTEX_M3")
+            _m_model = getattr(arm_const, _m_name,
+                               arm_const.UC_CPU_ARM_CORTEX_M3)
             try:
-                self._uc.ctl_set_cpu_model(arm_const.UC_CPU_ARM_CORTEX_M3)
+                self._uc.ctl_set_cpu_model(_m_model)
             except Exception as exc:  # noqa: BLE001
                 log.warning(
-                    "UnicornBackend: ctl_set_cpu_model(CORTEX_M3) failed (%s)"
-                    " — kernel boot may UC_ERR_INSN_INVALID", exc,
+                    "UnicornBackend: ctl_set_cpu_model(%s) failed (%s)"
+                    " — kernel boot may UC_ERR_INSN_INVALID", _m_name, exc,
                 )
 
         # Plain 32-bit A-profile ARM ("arm"): the generic default core does
