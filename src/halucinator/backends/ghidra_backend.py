@@ -49,6 +49,10 @@ _LANGUAGE_MAP: Dict[str, str] = {
     "powerpc:MPC8XX": "PowerPC:BE:32:MPC8270",
     "ppc64":          "PowerPC:BE:64:default",
     "x86":            "x86:LE:32:default",
+    # NVIDIA Falcon -- the microcontroller inside NVIDIA GPUs (PMU, SEC2,
+    # GSP, FECS/GPCCS).  Needs the ghidra-falcon processor module installed.
+    "falcon":         "Falcon:LE:32:fuc5",
+    "falcon-fuc4":    "Falcon:LE:32:fuc4",
 }
 
 
@@ -152,7 +156,21 @@ class GhidraBackend(InProcessIrqMixin, ARM32HalMixin, HalBackend):
 
         from ghidra.program.model.mem import MemoryConflictException  # type: ignore
         for region in self._regions:
-            start = default_space.getAddress(region.base_addr)
+            space = default_space
+            if getattr(region, "space", None):
+                named = self._address_factory.getAddressSpace(region.space)
+                if named is None:
+                    log.warning(
+                        "GhidraBackend: region %s asks for address space %r, "
+                        "which %s does not define; falling back to the default "
+                        "space. Loads and stores the language directs at %r "
+                        "will NOT see this region.",
+                        region.name, region.space,
+                        self._language.getLanguageID(), region.space,
+                    )
+                else:
+                    space = named
+            start = space.getAddress(region.base_addr)
             try:
                 if region.file and os.path.isfile(region.file):
                     with open(region.file, "rb") as fh:
@@ -193,6 +211,8 @@ class GhidraBackend(InProcessIrqMixin, ARM32HalMixin, HalBackend):
             self._patch_arm_unimplemented_callothers()
         elif self.arch == "arm64":
             self._patch_arm_unimplemented_callothers()
+        elif self.arch in self._CALLOTHER_STUBS:
+            self._patch_unimplemented_callothers(self._CALLOTHER_STUBS[self.arch])
 
     def shutdown(self) -> None:
         if self._emulator is not None:
@@ -769,6 +789,28 @@ class GhidraBackend(InProcessIrqMixin, ARM32HalMixin, HalBackend):
         except Exception as e:   # noqa: BLE001
             log.warning("GhidraBackend: setISAMode patch failed: %s", e)
 
+    # CALLOTHER pcodeops to stub per architecture, beyond the ARM set below.
+    # A stub returns 0 into the output varnode (if any) instead of faulting.
+    _CALLOTHER_STUBS: Dict[str, set] = {
+        # Falcon: `sleep` waits for a predicate we have no way to set without
+        # an interrupt source, and the crypt coprocessor is not modelled.
+        # Stubbing them lets boot continue instead of FAULTing.
+        "falcon":      {"FalconSleep", "FalconHalt", "FalconCrypt",
+                        "FalconCryptImm", "FalconSext", "FalconBitTest",
+                        "FalconXfer", "FalconItlb", "FalconPtlb", "FalconVtlb"},
+        "falcon-fuc4": {"FalconSleep", "FalconHalt", "FalconCrypt",
+                        "FalconCryptImm", "FalconSext", "FalconBitTest",
+                        "FalconXfer", "FalconItlb", "FalconPtlb", "FalconVtlb"},
+        # MIPS: setISAMode toggles MIPS16/microMIPS; firmware that never uses
+        # those modes only needs it not to fault.
+        "mips":        {"setISAMode"},
+        "mipsel":      {"setISAMode"},
+    }
+
+    def _patch_unimplemented_callothers(self, names: set) -> None:
+        """Install zero-returning stubs for the named CALLOTHER pcodeops."""
+        self._install_callother_stubs(names, (), label=self.arch)
+
     def _patch_arm_unimplemented_callothers(self) -> None:
         """Install no-op stubs for ARM CALLOTHER pcode-ops that Sleigh
         defines but the Cortex-M emulator doesn't implement, so kernel
@@ -839,6 +881,31 @@ class GhidraBackend(InProcessIrqMixin, ARM32HalMixin, HalBackend):
                 except Exception:  # noqa: BLE001
                     pass
 
+        self._install_callother_stubs(
+            explicit_targets, prefix_targets, label="ARM")
+
+    def _install_callother_stubs(self, explicit_targets, prefix_targets=(),
+                                 label: str = "") -> None:
+        """Reflectively install zero-returning handlers for CALLOTHER pcodeops.
+
+        Ghidra resolves a userop by index through the instruction state
+        modifier's pcodeOpMap, so overriding entries there makes the named ops
+        no-ops instead of faults. Shared by every architecture; only the name
+        set differs.
+        """
+        import jpype  # type: ignore  # noqa: F401
+        from ghidra.pcode.emulate.callother import OpBehaviorOther  # type: ignore
+        from java.lang import Integer as _JInteger  # type: ignore
+
+        @jpype.JImplements(OpBehaviorOther)
+        class _ZeroReturning:
+            @jpype.JOverride
+            def evaluate(self, emu, out, inputs):
+                if out is not None:
+                    try:
+                        emu.getMemoryState().setValue(out, 0)
+                    except Exception:
+                        pass
         try:
             eh_cls = self._emulator.getClass()
             f1 = eh_cls.getDeclaredField("emulator"); f1.setAccessible(True)
@@ -867,10 +934,10 @@ class GhidraBackend(InProcessIrqMixin, ARM32HalMixin, HalBackend):
             if installed:
                 log.debug(
                     "GhidraBackend: installed zero-returning stubs for %d "
-                    "ARM CALLOTHER pcodeops: %s", len(installed),
+                    "%s CALLOTHER pcodeops: %s", label, len(installed),
                     ", ".join(installed),
                 )
         except Exception as e:  # noqa: BLE001
             log.warning(
-                "GhidraBackend: ARM CALLOTHER stub install failed: %s", e,
+                "GhidraBackend: %s CALLOTHER stub install failed: %s", label, e,
             )

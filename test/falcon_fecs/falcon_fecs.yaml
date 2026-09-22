@@ -1,0 +1,22 @@
+# NVIDIA Pascal GP102 FECS microcode -- the Falcon microcontroller inside the
+# GPU's graphics block.  Firmware is the redistributable blob from
+# linux-firmware (nvidia/gp102/gr/fecs_inst.bin).
+machine:
+  arch: falcon
+  cpu_model: fuc5
+  entry_addr: 0x0
+  init_sp: 0x4000          # top of DMEM
+
+memories:
+  # IMEM: instruction memory holds the image.  Falcon is Harvard, so data
+  # lives in a separate space -- see dmem below.
+  # fetch fecs_inst.bin from linux-firmware -- see README.md
+  imem: {base_addr: 0x00000000, file: fecs_inst.bin, permissions: rwx,
+         size: 0x8000}
+  # DMEM: data + stack.
+  dmem: {base_addr: 0x0, size: 0x4000, permissions: rw, space: dmem}
+  # Engine MMIO.  The io space the module declares; modelled here as memory
+  # so peripheral handlers can be attached to ranges within it.
+  io:   {base_addr: 0x0, size: 0x40000, permissions: rw, space: io}
+
+intercepts: []
