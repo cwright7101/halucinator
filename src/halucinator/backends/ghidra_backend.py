@@ -232,9 +232,22 @@ class GhidraBackend(InProcessIrqMixin, ARM32HalMixin, HalBackend):
     # HalBackend primitives
     # ------------------------------------------------------------------
 
-    def _addr(self, addr: int):
-        default_space = self._address_factory.getDefaultAddressSpace()
-        return default_space.getAddress(addr)
+    def _addr(self, addr: int, space: Optional[str] = None):
+        """Build a Ghidra address, optionally in a named (non-default) space.
+
+        Harvard targets keep code, data and I/O in separate Sleigh spaces, so
+        an address is only meaningful together with the space it belongs to.
+        Callers that know which space they mean (an exception deliverer
+        pushing onto a data-space stack, say) pass it; everyone else gets the
+        language default and the previous behaviour.
+        """
+        if space:
+            named = self._address_factory.getAddressSpace(space)
+            if named is not None:
+                return named.getAddress(addr)
+            log.warning("GhidraBackend: no address space %r in %s; using the "
+                        "default space", space, self._language.getLanguageID())
+        return self._address_factory.getDefaultAddressSpace().getAddress(addr)
 
     # Ghidra register-name lookup fails for some cross-arch aliases
     # (e.g. "sp" on PowerPC where the stack pointer is r1). Normalize
@@ -261,9 +274,10 @@ class GhidraBackend(InProcessIrqMixin, ARM32HalMixin, HalBackend):
         return None
 
     def read_memory(self, addr: int, size: int, num_words: int = 1,
-                    raw: bool = False) -> Union[int, bytes]:
+                    raw: bool = False, space: Optional[str] = None
+                    ) -> Union[int, bytes]:
         total = size * num_words
-        data = bytes(self._emulator.readMemory(self._addr(addr), total))
+        data = bytes(self._emulator.readMemory(self._addr(addr, space), total))
         if raw or num_words > 1:
             return data
         endian = "big" if self._language.isBigEndian() else "little"
@@ -271,14 +285,15 @@ class GhidraBackend(InProcessIrqMixin, ARM32HalMixin, HalBackend):
 
     def write_memory(self, addr: int, size: int,
                      value: Union[int, bytes, bytearray],
-                     num_words: int = 1, raw: bool = False) -> bool:
+                     num_words: int = 1, raw: bool = False,
+                     space: Optional[str] = None) -> bool:
         if isinstance(value, (bytes, bytearray)):
             data = bytes(value)
         else:
             endian = "big" if self._language.isBigEndian() else "little"
             data = value.to_bytes(size * num_words, endian)
         try:
-            self._emulator.writeMemory(self._addr(addr), data)
+            self._emulator.writeMemory(self._addr(addr, space), data)
             return True
         except Exception:  # noqa: BLE001
             return False
