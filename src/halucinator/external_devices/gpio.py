@@ -29,7 +29,7 @@ def rx_from_emulator(emu_rx_port: int) -> None:
     mq_socket = context.socket(zmq.SUB)
     mq_socket.connect("ipc:///tmp/Halucinator2IoServer%s" % emu_rx_port)
     #mq_socket.setsockopt(zmq.SUBSCRIBE, "GPIO.write_pin")
-    mq_socket.setsockopt(zmq.SUBSCRIBE, '')
+    mq_socket.setsockopt_string(zmq.SUBSCRIBE, '')
     #mq_socket.setsockopt(zmq.SUBSCRIBE, "GPIO.toggle_pin")
 
     print("Setup GPIO Listener")
@@ -47,14 +47,21 @@ def update_gpio(emu_tx_port: int) -> None:
     context = zmq.Context()
     to_emu_socket = context.socket(zmq.PUB)
     to_emu_socket.connect("ipc:///tmp/IoServer2Halucinator%s" % emu_tx_port)
+    # Let the PUB/SUB connection settle, or a fast sender (a test, a script
+    # piping input) loses its first messages to the zmq slow-joiner. Someone
+    # typing at the prompt never hit this.
+    time.sleep(0.2)
 
     try:
         while (1):
-            pin = raw_input("Pin: ")  # noqa: F821 — legacy Py2 bug preserved for tests
-            value = raw_input("Value: ")  # noqa: F821
+            # `input`, not Python 2's `raw_input` — this loop used to raise
+            # NameError on its first iteration and never sent anything.
+            pin = input("Pin: ")
+            value = input("Value: ")
             data = {'id': pin, 'value': int(value)}
-            # msg = encode_zmq_msg(topic, data)
-            # to_emu_socket.send(msg)
+            msg = encode_zmq_msg(topic, data)
+            # send_string: encode_zmq_msg returns str, which send() rejects.
+            to_emu_socket.send_string(msg)
             time.sleep(0)
     except (KeyboardInterrupt, EOFError):
         __run_server = False

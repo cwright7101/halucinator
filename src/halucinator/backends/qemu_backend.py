@@ -590,17 +590,37 @@ class _GDBClient:
     # Memory access
     # ------------------------------------------------------------------
 
+    # GDB RSP bounds a single m/M transfer by the negotiated packet size; a
+    # too-large read/write is rejected (E22). Chunk at a conservative size so
+    # arbitrary-length transfers (e.g. snapshotting a whole RAM region) work
+    # regardless of the stub's PacketSize.
+    _MEM_CHUNK = 1024
+
     def read_memory(self, addr: int, length: int) -> bytes:
-        resp = self._cmd(f"m{addr:x},{length:x}".encode())
-        if resp.startswith(b"E"):
-            raise OSError(f"GDB read_memory error: {resp!r}")
-        return bytes.fromhex(resp.decode())
+        out = bytearray()
+        off = 0
+        while off < length:
+            n = min(self._MEM_CHUNK, length - off)
+            resp = self._cmd(f"m{addr + off:x},{n:x}".encode())
+            if resp.startswith(b"E"):
+                raise OSError(f"GDB read_memory error: {resp!r}")
+            chunk = bytes.fromhex(resp.decode())
+            if not chunk:
+                raise OSError(
+                    f"GDB read_memory short read at 0x{addr + off:x}")
+            out += chunk
+            off += len(chunk)
+        return bytes(out)
 
     def write_memory(self, addr: int, data: bytes) -> None:
-        hex_data = data.hex()
-        resp = self._cmd(f"M{addr:x},{len(data):x}:{hex_data}".encode())
-        if resp != b"OK":
-            raise OSError(f"GDB write_memory error: {resp!r}")
+        off = 0
+        while off < len(data):
+            chunk = data[off:off + self._MEM_CHUNK]
+            resp = self._cmd(
+                f"M{addr + off:x},{len(chunk):x}:{chunk.hex()}".encode())
+            if resp != b"OK":
+                raise OSError(f"GDB write_memory error: {resp!r}")
+            off += len(chunk)
 
     # ------------------------------------------------------------------
     # Execution control
@@ -745,6 +765,8 @@ class _QMPClient:
         self._sock: Optional[socket.socket] = None
         self._buf: bytes = b""
         self._lock = threading.Lock()
+        # Monotonic request id so a reply can be matched to its command.
+        self._id: int = 0
 
     def connect(self) -> None:
         if self.unix_path:
@@ -792,11 +814,30 @@ class _QMPClient:
         return json.loads(line) if line else {}
 
     def execute(self, command: str, arguments: Optional[Dict] = None) -> Dict:
-        msg: Dict = {"execute": command}
+        # QMP interleaves ASYNCHRONOUS EVENTS with command replies on the same
+        # socket, so the next line after a request is not necessarily its
+        # answer: resuming the guest emits RESUME, stopping emits STOP, and so
+        # on. Returning that event as the reply silently yields a response with
+        # no "return" member -- e.g. libafl-cov-result appearing to report no
+        # edge counts when it was never actually read. Tag every request with
+        # an id and read until the reply carrying it arrives, discarding events
+        # (which never carry an id).
+        self._id += 1
+        req_id = self._id
+        msg: Dict = {"execute": command, "id": req_id}
         if arguments:
             msg["arguments"] = arguments
         self._send(msg)
-        return self._recv_line()
+        while True:
+            resp = self._recv_line()
+            if not isinstance(resp, dict) or not resp:
+                return resp
+            if "event" in resp:
+                continue          # asynchronous event, not our reply
+            if resp.get("id") == req_id:
+                return resp
+            # A reply for an earlier request (or an id-less message): skip it
+            # rather than mistake it for this command's answer.
 
 
 # ---------------------------------------------------------------------------
@@ -856,16 +897,7 @@ class QEMUBackend(ARM32HalMixin, HalBackend):
         # Override the class-level ARM32 ABI helpers with the arch-specific
         # mixin's methods. ARM32 remains the default via inheritance so the
         # class is usable without __init__ (e.g. in unit tests).
-        abi_cls = ABI_MIXINS.get(arch, ARM32HalMixin)
-        self._abi = abi_cls
-        if abi_cls is not ARM32HalMixin:
-            for method_name in ("get_arg", "set_args", "get_ret_addr",
-                                "set_ret_addr", "execute_return",
-                                "read_string"):
-                method = getattr(abi_cls, method_name, None)
-                if method is not None:
-                    setattr(self, method_name,
-                            method.__get__(self, type(self)))
+        self._bind_abi(arch)
 
     # ------------------------------------------------------------------
     # Lifecycle

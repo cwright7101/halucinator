@@ -7,6 +7,7 @@ This is the halucinator entry point
 from __future__ import annotations
 
 from argparse import ArgumentParser
+import inspect
 import logging
 from multiprocessing import Lock
 import threading
@@ -181,9 +182,15 @@ def setup_memory(
             mod_path, _, cls_name = memory.emulate.rpartition(".")
             emulate = getattr(importlib.import_module(mod_path), cls_name)
         else:
-            # Bare name: resolve on the generic peripheral_models module
-            # (backward-compatible with existing configs).
-            emulate = getattr(peripheral_emulators, memory.emulate)
+            # Bare name: resolve on the generic peripheral_models module, then
+            # the auto_model module (so `emulate: AutoPeripheral` works without
+            # the fully-qualified path). Backward-compatible with existing configs.
+            from .peripheral_models import auto_model as _auto_model
+            emulate = (getattr(peripheral_emulators, memory.emulate, None)
+                       or getattr(_auto_model, memory.emulate, None))
+            if emulate is None:
+                raise AttributeError(
+                    "unknown emulate peripheral %r" % memory.emulate)
     else:
         emulate = None
     log.info(
@@ -288,17 +295,42 @@ def emulate_binary(
     singlestep: bool = False,
     qemu_args: Optional[str] = None,
     gdb_server_port: Optional[int] = None,
+    dap_port: Optional[int] = None,
+    dap_bind: str = "127.0.0.1",
     print_qemu_command: Optional[bool] = None,
     emulator: str = "avatar2",
+    snapshot_at: Optional[str] = None,
+    snapshot_out: Optional[str] = None,
+    snapshot_include_devices: bool = False,
+    restore: Optional[str] = None,
 ) -> None:  # pylint: disable=too-many-arguments,too-many-locals
     """
     Start emulation of the firmware.
 
     emulator: backend to use - "avatar2" (default), "qemu", or "unicorn".
+    snapshot_at/snapshot_out/restore: whole-machine checkpointing, in-process
+    backends only (see doc/snapshot_restore.md).
     """
+
+    if (snapshot_at or restore) and emulator != "unicorn":
+        log.error("--snapshot-at/--restore need the in-process unicorn "
+                  "backend (--emulator unicorn); %r can't snapshot yet",
+                  emulator)
+        sys.exit(-1)
 
     # Non-avatar2 backends go through the new HalBackend factory path.
     if emulator != "avatar2":
+        if dap_port is not None:
+            # The DAP server drives bp_handlers.debugger.Debugger, which is
+            # built on avatar2's QemuTarget/TargetStates. Fail loudly rather
+            # than silently ignoring --dap and leaving a client hanging on a
+            # port that will never be bound.
+            log.error(
+                "--dap requires the avatar2 backend (got %r). Re-run with "
+                "--emulator avatar2, or use --gdb-server for an in-process "
+                "backend.", emulator,
+            )
+            sys.exit(-1)
         return _emulate_with_backend(
             config=config,
             emulator=emulator,
@@ -313,6 +345,10 @@ def emulate_binary(
             qemu_args=qemu_args,
             gdb_server_port=gdb_server_port,
             print_qemu_command=print_qemu_command,
+            snapshot_at=snapshot_at,
+            snapshot_out=snapshot_out,
+            snapshot_include_devices=snapshot_include_devices,
+            restore=restore,
         )
 
     # Legacy avatar2 path - unchanged behaviour.
@@ -358,7 +394,15 @@ def emulate_binary(
     if gdb_server_port is not None and gdb_server_port >= 0:
         avatar.load_plugin("gdbserver")
         # pylint: disable=no-member
-        avatar.spawn_gdb_server(qemu, gdb_server_port, do_forwarding=False)
+        # stop_filter tells the RSP server which stops belong to HALucinator's
+        # own HAL intercepts rather than to a client breakpoint, so it can
+        # resume them instead of reporting them to the attached debugger.
+        avatar.spawn_gdb_server(
+            qemu,
+            gdb_server_port,
+            do_forwarding=False,
+            stop_filter=lambda target, pc: intercepts.check_hal_bp(pc),
+        )
 
     register_intercepts(config, avatar, qemu)
 
@@ -384,7 +428,51 @@ def emulate_binary(
     except Exception:  # noqa: BLE001
         qemu._irq_controller = None
 
-    _start_execution(avatar, qemu, rx_port, tx_port, gdb_server_port)
+    if dap_port is not None:
+        _start_dap_server(avatar, qemu, dap_port, dap_bind)
+
+    _start_execution(avatar, qemu, rx_port, tx_port, gdb_server_port,
+                     dap_port=dap_port)
+
+
+def _start_dap_server(
+    avatar: Avatar, qemu: Any, dap_port: int, dap_bind: str,
+) -> None:
+    """
+    Start the Debug Adapter Protocol server so an IDE (the halucinator-vscode
+    extension, or any DAP client) can attach.
+
+    Imported lazily: halucinator.debug_adapter pulls in bp_handlers.debugger,
+    which imports avatar2 at module scope. A module-level import here would
+    make avatar2 a hard dependency of main.py again and break the
+    avatar2-optional install that the unicorn/ghidra/renode backends rely on.
+    """
+    # pylint: disable=import-outside-toplevel
+    from .debug_adapter.debug_adapter import DAPServer
+    from .bp_handlers.debugger import Debugger
+
+    debugger = Debugger(qemu, avatar, None)
+    # Tell the intercept machinery we're in a debug session. HAL intercept
+    # handlers then wait for the monitor thread's emulation_detected ack
+    # before calling target.cont(), which removes the race where
+    # monitor_running observes STOPPED, takes the post-loop branch, and then
+    # finds the target RUNNING again by the time it reads the PC.
+    intercepts.debug_session = True
+    # Start the monitor thread now so request_queue is always being serviced.
+    # Without this, send_request from a DAP handler blocks forever waiting on
+    # a queue nobody is draining.
+    debugger.start_monitoring(add_shell_callback=False)
+    dap_thread = threading.Thread(
+        target=DAPServer(debugger, dap_port, bind_addr=dap_bind),
+        daemon=True,
+    )
+    dap_thread.start()
+    log.info(
+        "DAP server listening on %s:%d%s",
+        dap_bind,
+        dap_port,
+        "" if dap_bind == "127.0.0.1" else " (EXPOSED: no authentication)",
+    )
 
 
 def _start_execution(
@@ -393,6 +481,7 @@ def _start_execution(
     rx_addr: int,
     tx_addr: int,
     gdb_server_port: Optional[int],
+    dap_port: Optional[int] = None,
 ) -> None:
     """
     Starts the actual execution of qemu,
@@ -428,12 +517,18 @@ def _start_execution(
 
     signal.signal(signal.SIGINT, int_signal_handler)
     qemu.halucinator_shutdown = halucinator_shutdown
-    log.info("Letting QEMU Run")
 
-    if gdb_server_port is not None:
-        print(f"GDB Server Running on localhost:{gdb_server_port}")
-        print("Connect GDB and continue to run")
+    if gdb_server_port is not None or dap_port is not None:
+        # With a debug server enabled, leave QEMU paused at the entry point so
+        # the client can attach and set breakpoints before anything runs.
+        # Resuming here would race the client past the code it wants to stop on.
+        if gdb_server_port is not None:
+            print(f"GDB Server Running on localhost:{gdb_server_port}")
+        if dap_port is not None:
+            print(f"DAP Server Running on localhost:{dap_port}")
+        print("QEMU paused at entry - connect a debug client to start execution")
     else:
+        log.info("Letting QEMU Run")
         qemu.cont()
     try:
         periph_server.run_server()  # Blocks Forever
@@ -456,6 +551,10 @@ def _emulate_with_backend(
     qemu_args: Optional[str] = None,
     gdb_server_port: Optional[int] = None,
     print_qemu_command: Optional[bool] = None,
+    snapshot_at: Optional[str] = None,
+    snapshot_out: Optional[str] = None,
+    snapshot_include_devices: bool = False,
+    restore: Optional[str] = None,
 ) -> None:
     """
     Non-avatar2 emulation entry point using the HalBackend abstraction.
@@ -486,6 +585,9 @@ def _emulate_with_backend(
     if emulator == "unicorn":
         return _emulate_with_unicorn_backend(
             config, target_name=target_name, rx_port=rx_port, tx_port=tx_port,
+            snapshot_at=snapshot_at, snapshot_out=snapshot_out,
+            snapshot_include_devices=snapshot_include_devices,
+            restore=restore,
         )
     if emulator == "renode":
         return _emulate_with_renode_backend(
@@ -923,9 +1025,10 @@ def _instantiate_peripheral(name: str, memory: Any, db_path: str) -> Any:
     class path (``module.path.ClassName``) is imported directly — letting a
     device-specific model live in its own subpackage (e.g.
     ``peripheral_models.bpv5.*``) without polluting the generic module. A bare
-    name searches the at91 module (At91SysCtrl/At91Emac/At91Dbgu) then the
-    generic module (GenericPeripheral/HaltPeripheral). Returns None if unknown
-    (region falls back to plain RAM)."""
+    name searches the at91 module (At91SysCtrl/At91Emac/At91Dbgu), the auto_model
+    module (AutoPeripheral/RecordingPeripheral), then the generic module
+    (GenericPeripheral/HaltPeripheral). Returns None if unknown (region falls back
+    to plain RAM)."""
     if "." in name:
         import importlib
         mod_path, _, cls_name = name.rpartition(".")
@@ -934,20 +1037,55 @@ def _instantiate_peripheral(name: str, memory: Any, db_path: str) -> Any:
         except ImportError:
             cls = None
     else:
-        from halucinator.peripheral_models import at91, generic
+        from halucinator.peripheral_models import at91, auto_model, generic
         cls = (getattr(at91, name, None)
+               or getattr(auto_model, name, None)
                or getattr(generic, name, None))
     if cls is None:
         log.warning("Unknown emulate peripheral %r; region %s left as RAM",
                     name, memory.name)
         return None
     kwargs: Dict[str, Any] = {}
+    # Forward the run's MMIO-trace path to any peripheral that accepts one.
+    # This argument was accepted here but never passed on, so the recording
+    # peripherals were always built with their default db_path=None and no
+    # trace was ever persisted. Gated on the signature: most peripherals take
+    # no db_path and would raise TypeError.
+    try:
+        params = inspect.signature(cls).parameters
+        # ONLY an explicitly named db_path parameter counts. A **kwargs
+        # constructor is not consent: most peripherals declare one and forward
+        # the rest elsewhere, so treating it as "accepts db_path" injects a
+        # db_path into peripherals that never asked for one.
+        takes_db = "db_path" in params
+    except (TypeError, ValueError):  # pragma: no cover
+        takes_db = False
+    # Opt in with HAL_MMIO_TRACE=1. Recording costs real time inside every MMIO
+    # access, so forwarding db_path whenever a peripheral merely *accepts* it
+    # turns tracing on for every run of every device.
+    if takes_db and db_path is not None and os.environ.get("HAL_MMIO_TRACE") == "1":
+        kwargs["db_path"] = db_path
     # Pull peripheral-specific kwargs from the YAML `properties` block
     # (HalMemConfig.properties is the generic per-peripheral dict slot).
+    # Applied last so a device can override the default path.
     extra = getattr(memory, "properties", None)
     if isinstance(extra, dict):
         kwargs.update(extra)
     return cls(memory.name, memory.base_addr, memory.size, **kwargs)
+
+
+def _resolve_snapshot_addr(spec: str, config: Any) -> int:
+    """--snapshot-at accepts a hex/decimal address or a symbol name."""
+    try:
+        return int(spec, 0)
+    except ValueError:
+        pass
+    addr = config.get_addr_for_symbol(spec)
+    if addr is None:
+        log.error("--snapshot-at: %r is neither an address nor a known "
+                  "symbol", spec)
+        sys.exit(-1)
+    return addr
 
 
 def _emulate_with_unicorn_backend(
@@ -955,6 +1093,10 @@ def _emulate_with_unicorn_backend(
     target_name: Optional[str],
     rx_port: int,
     tx_port: int,
+    snapshot_at: Optional[str] = None,
+    snapshot_out: Optional[str] = None,
+    snapshot_include_devices: bool = False,
+    restore: Optional[str] = None,
 ) -> None:
     """
     In-process emulation via unicorn-engine. No subprocess, no GDB/QMP -
@@ -963,6 +1105,11 @@ def _emulate_with_unicorn_backend(
     Considerably faster than the QEMU paths for short-running firmware
     that doesn't need full hardware peripheral timing, but only supports
     ARM at the moment (UnicornBackend._ARCH_MAP).
+
+    snapshot_at/snapshot_out: run until PC reaches the given address or
+    symbol, write a portable whole-machine snapshot, and exit (the
+    boot-once workflow). restore: load a .halsnap before running, so
+    execution resumes from the checkpoint instead of the reset vector.
     """
     from halucinator.backends.hal_backend import MemoryRegion
     from halucinator.backends.unicorn_backend import UnicornBackend
@@ -1006,6 +1153,39 @@ def _emulate_with_unicorn_backend(
                 region.write_hook = (
                     lambda off, sz, val, _p=periph, _b=backend: _p.hw_write(
                         off, sz, val, pc=_b.regs.pc))
+                # Hand the peripheral a handle on the backend. A model that has
+                # to reach guest memory (EasyDMA, a DMA descriptor, a ring
+                # buffer) or ask the emulator to take an interrupt (a ColdFire
+                # INTC's force-interrupt register, an RTOS doorbell) needs one.
+                # Until now the only route was to register a breakpoint whose
+                # handler passed it along -- a breakpoint existing purely to
+                # smuggle a reference, and impossible on a stripped image with
+                # no symbol to hang one off, which is exactly when
+                # register-level modelling is the only seam available.
+                #
+                # BOTH forms are offered so a model can use whichever suits:
+                #   * `hal_backend` attribute -- always set, no ceremony, and
+                #     enough for a model that only needs to read/write memory
+                #     or assert a line;
+                #   * `set_backend(backend)` -- optional hook for a model that
+                #     must REACT to being wired up (cache a region, claim an
+                #     x86 port range, start a thread).
+                # A model that defines neither is unaffected, and one that
+                # already receives the handle from a breakpoint just gets it
+                # earlier. Wiring a model must never abort the run, so both
+                # failures are logged rather than raised.
+                try:
+                    periph.hal_backend = backend
+                except Exception:  # noqa: BLE001
+                    log.debug("peripheral %s: cannot set hal_backend",
+                              emulate_name, exc_info=True)
+                setter = getattr(periph, "set_backend", None)
+                if callable(setter):
+                    try:
+                        setter(backend)
+                    except Exception:  # noqa: BLE001
+                        log.exception("peripheral %s: set_backend failed",
+                                      emulate_name)
                 auto_peripherals.append(periph)
                 if periph.__class__.__name__ == "AutoPeripheral":
                     backend.skip_svc = True
@@ -1051,6 +1231,21 @@ def _emulate_with_unicorn_backend(
     periph_thread.start()
 
     def _shutdown() -> None:
+        # Persist any buffered MMIO trace BEFORE tearing the backend down.
+        # The recording peripherals only evaluate their flush condition inside
+        # an access, so a run that issues fewer than FLUSH_EVERY accesses --
+        # or that simply stops touching MMIO after early boot -- never writes
+        # its tail, and killing the process loses the trace entirely. That is
+        # most of a short bring-up run, which is exactly when the trace is
+        # wanted.
+        for _p in auto_peripherals:
+            _flush = getattr(_p, "flush", None)
+            if callable(_flush):
+                try:
+                    _flush()
+                except Exception:  # noqa: BLE001 - never block shutdown
+                    log.exception("peripheral %s: trace flush failed",
+                                  getattr(_p, "name", _p))
         try:
             backend.shutdown()
         except Exception:  # noqa: BLE001
@@ -1063,26 +1258,88 @@ def _emulate_with_unicorn_backend(
 
     signal.signal(signal.SIGINT, _sigint)
 
+    # Snapshot/restore wiring (doc/snapshot_restore.md). Restore runs after
+    # intercept registration + peripheral-server start so the restored
+    # Layer-2 state lands on the same live objects the run will use.
+    if restore:
+        from halucinator.backends.hal_backend import Snapshot as _BSnap
+        from halucinator.backends.hal_backend import SnapshotError
+        from halucinator.snapshot import (DeviceLayer, SystemSnapshot,
+                                          load_snapshot_file, system_restore)
+        try:
+            snap, _header = load_snapshot_file(restore)
+            if isinstance(snap, _BSnap):  # backend-only snapshot file
+                snap = SystemSnapshot(backend=snap, peripherals={})
+            result = system_restore(backend, snap, device_layer=DeviceLayer())
+        except SnapshotError as exc:
+            # A corrupt/incompatible/wrong-arch file: fail cleanly, don't dump
+            # a raw traceback and leak the backend + peripheral server.
+            hal_log.getHalLogger().error("--restore %s: %s", restore, exc)
+            _shutdown()
+            sys.exit(-1)
+        if not result.ok:
+            hal_log.getHalLogger().error(
+                "--restore %s failed at layer %s: %s",
+                restore, result.layer, result.message)
+            _shutdown()
+            sys.exit(-1)
+        hal_log.getHalLogger().info(
+            "Restored snapshot %s; resuming at pc=0x%08x",
+            restore, backend.regs.pc)
+
+    snapshot_addr: Optional[int] = None
+    on_snapshot = None
+    if snapshot_at:
+        snapshot_addr = _resolve_snapshot_addr(snapshot_at, config)
+        out_path = snapshot_out or os.path.join(outdir, "snapshot.halsnap")
+        backend.set_breakpoint(snapshot_addr)
+        log.info("Will snapshot to %s when PC reaches 0x%08x",
+                 out_path, snapshot_addr)
+
+        def on_snapshot(b: "HalBackend") -> None:
+            from halucinator.snapshot import (DeviceLayer, save_snapshot_file,
+                                              system_snapshot)
+            # Only poll external devices when asked — the collection window
+            # costs a full timeout on every save, wasted if there are none.
+            dl = DeviceLayer() if snapshot_include_devices else None
+            snap = system_snapshot(b, portable=True, device_layer=dl)
+            p = save_snapshot_file(snap, out_path)
+            hal_log.getHalLogger().info(
+                "Snapshot written: %s (%d bytes) at pc=0x%08x — restore "
+                "with --restore %s", p, p.stat().st_size, b.regs.pc, p)
+
     log.info("Letting Unicorn Run (direct backend)")
     try:
-        _in_process_dispatch_loop(backend)
+        _in_process_dispatch_loop(backend, snapshot_at=snapshot_addr,
+                                  on_snapshot=on_snapshot)
     except KeyboardInterrupt:
         pass
     finally:
         _shutdown()
 
 
-def _in_process_dispatch_loop(backend: "HalBackend") -> None:
+def _in_process_dispatch_loop(backend: "HalBackend",
+                              snapshot_at: Optional[int] = None,
+                              on_snapshot: Optional[Any] = None) -> None:
     """
     Drive any in-process HalBackend (UnicornBackend, GhidraBackend, and
     anything else whose cont() blocks until a breakpoint fires). Read
     PC after each halt, dispatch to the registered bp_handler, and
     resume. Exits cleanly when cont() returns at an address that has
     no registered handler - i.e. the firmware ran off the rails.
+
+    snapshot_at/on_snapshot: --snapshot-at support — when PC first halts at
+    *snapshot_at*, call on_snapshot(backend) and return (snapshot-then-exit,
+    the boot-once workflow). Checked before intercept dispatch, so a
+    snapshot address that is also an intercept snapshots instead of running
+    the handler.
     """
     backend.cont()  # blocks until first breakpoint
     while True:
         pc = backend.read_register("pc") & ~1  # mask Thumb bit on ARM
+        if snapshot_at is not None and pc == (snapshot_at & ~1):
+            on_snapshot(backend)
+            return
         bp_id = intercepts.addr2bp_lut.get(pc)
         if bp_id is None:
             # An asynchronous IRQ (e.g. a TimerModel tick injected from a
@@ -1092,10 +1349,10 @@ def _in_process_dispatch_loop(backend: "HalBackend") -> None:
             # NOT "ran off the rails", it is normal interrupt-driven
             # execution. Re-enter cont() so the ISR (and the periodic
             # control loop it drives) keeps running, instead of exiting.
-            # We only do this when an IRQ controller is configured and the
-            # PC lands in mapped code; a genuine runaway (unmapped fetch)
-            # still surfaces as a UcError from cont().
-            if getattr(backend, "_irq_controller", None) is not None:
+            # We only do this when the backend reports an in-process IRQ is
+            # active (an IRQ controller is configured); a genuine runaway
+            # (unmapped fetch) still surfaces as a UcError from cont().
+            if getattr(backend, "in_process_irq_active", lambda: False)():
                 try:
                     backend.cont()
                     continue
@@ -1513,6 +1770,42 @@ def main() -> None:
         help="Port to run GDB Server port",
     )
     parser.add_argument(
+        "--gdb-server",
+        type=int,
+        nargs="?",
+        const=3333,
+        default=None,
+        metavar="PORT",
+        dest="gdb_server",
+        help=(
+            "Start GDB RSP server for external debuggers (default port: 3333). "
+            "Alias for --gdb_server_port, kept for the halucinator-vscode "
+            "extension and existing launch configs."
+        ),
+    )
+    parser.add_argument(
+        "--dap",
+        type=int,
+        nargs="?",
+        const=34157,
+        default=None,
+        metavar="PORT",
+        help="Start Debug Adapter Protocol server (default port: 34157)",
+    )
+    parser.add_argument(
+        "--dap-bind",
+        type=str,
+        default="127.0.0.1",
+        metavar="ADDR",
+        dest="dap_bind",
+        help=(
+            "Interface for the DAP server to bind. Defaults to 127.0.0.1 "
+            "(loopback-only) because no authentication is implemented. "
+            "Use 0.0.0.0 to accept remote connections - only on trusted "
+            "networks."
+        ),
+    )
+    parser.add_argument(
         "-e", "--elf", default=None, help="Elf file, required to use recorder"
     )
     parser.add_argument(
@@ -1530,6 +1823,37 @@ def main() -> None:
         action="store_true",
         default=None,
         help="Just print the QEMU Command",
+    )
+    parser.add_argument(
+        "--snapshot-at",
+        default=None,
+        metavar="ADDR|SYMBOL",
+        help="Run until PC reaches this address (0x… or decimal) or symbol, "
+        "write a portable whole-machine snapshot, and exit. In-process "
+        "backends only (--emulator unicorn). See doc/snapshot_restore.md",
+    )
+    parser.add_argument(
+        "--snapshot-out",
+        default=None,
+        metavar="PATH",
+        help="Where --snapshot-at writes the snapshot "
+        "(default: tmp/<name>/snapshot.halsnap)",
+    )
+    parser.add_argument(
+        "--snapshot-include-devices",
+        action="store_true",
+        default=False,
+        help="Also capture external zmq device state in --snapshot-at "
+        "(costs a ~1s collection window; off by default since most "
+        "snapshots have no external devices)",
+    )
+    parser.add_argument(
+        "--restore",
+        default=None,
+        metavar="PATH",
+        help="Restore a .halsnap snapshot after setup, so execution resumes "
+        "from the checkpoint instead of the reset vector. Use the same "
+        "config files the snapshot was taken with",
     )
     parser.add_argument(
         "-q",
@@ -1565,6 +1889,13 @@ def main() -> None:
     # emulator key can come from YAML config options or CLI
     emulator = getattr(args, "emulator", None) or config.options.get("emulator", "avatar2")
 
+    # --gdb-server and -d/--gdb_server_port are two spellings of one setting.
+    # --gdb-server wins when both are given; it's the explicit, newer spelling
+    # and the one the halucinator-vscode extension emits.
+    gdb_server_port = (
+        args.gdb_server if args.gdb_server is not None else args.gdb_server_port
+    )
+
     emulate_binary(
         config,
         args.name,
@@ -1575,9 +1906,15 @@ def main() -> None:
         gdb_port=args.gdb_port,
         singlestep=args.singlestep,
         qemu_args=qemu_args,
-        gdb_server_port=args.gdb_server_port,
+        gdb_server_port=gdb_server_port,
+        dap_port=args.dap,
+        dap_bind=args.dap_bind,
         print_qemu_command=args.print_qemu_command,
         emulator=emulator,
+        snapshot_at=args.snapshot_at,
+        snapshot_out=args.snapshot_out,
+        snapshot_include_devices=args.snapshot_include_devices,
+        restore=args.restore,
     )
 
 

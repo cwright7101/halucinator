@@ -132,7 +132,7 @@ source ~/.virtualenvs/halucinator/bin/activate
 ```bash
 pip install -e deps/avatar2/
 pip install -r src/requirements.txt
-pip install -e src
+pip install -e .
 pip install pytest-cov pytest-timeout  # for running tests
 ```
 
@@ -293,8 +293,8 @@ Or from Ghidra's Debugger tool, use the **gdb** launcher with
 The `--gdb-server` and `--dap` flags can be combined to run both servers
 simultaneously.
 
-See [doc/debugging.md](doc/debugging.md) for a full walkthrough,
-architecture-specific notes, and troubleshooting.
+See [doc/debugging.md](https://github.com/halucinator/halucinator/blob/master/doc/debugging.md)
+for a full walkthrough, architecture-specific notes, and troubleshooting.
 
 ## Running
 
@@ -329,7 +329,7 @@ In list below after the colon (:) denotes the file/cmd .
 
 
 2. Copy binary to a dir of you choice and cd to it:  `test/STM32/example`
-3. Create binary file: `<halucinator_repo_root>/src/tools/make_bin.sh Uart_Hyperterminal_IT_O0.elf` creates `Uart_Hyperterminal_IT_O0.elf.bin`
+3. Create binary file: `<halucinator_repo_root>/src/halucinator/tools/make_bin.sh Uart_Hyperterminal_IT_O0.elf` creates `Uart_Hyperterminal_IT_O0.elf.bin`
 4. Create Memory Layout (specifies memory map of chip): `Uart_Hyperterminal_IT_O0_memory.yaml`
 5. Create Address File (maps function names to address): `Uart_Hyperterminal_IT_O0_addrs.yaml`
 6. Create Intercept File (defines functions to intercept and what handler to use for it): `Uart_Hyperterminal_IT_O0_config.yaml`
@@ -537,3 +537,31 @@ and the full pytest suite with coverage reporting.
 - **mbed**: Mbed OS (boot, serial, timer)
 - **vxworks**: VxWorks RTOS (boot, filesystem, ethernet, interrupts, scheduler, tasks)
 - **zephyr**: Zephyr RTOS (filesystem, UART)
+
+## License and credit
+
+GPL-3.0-or-later.
+
+HALucinator was initially created by Abraham Clements and Eric Gustafson at
+Sandia National Laboratories, together with their collaborators and PhD
+advisors at Purdue University, UC Santa Barbara, and EPFL. The work was
+published at the 29th USENIX Security Symposium:
+
+> [HALucinator: Firmware Re-hosting Through Abstraction Layer
+> Emulation](https://www.usenix.org/conference/usenixsecurity20/presentation/clements).
+> Abraham Clements, Eric Gustafson, Tobias Scharnowski, Paul Grosen, David
+> Fritz, Christopher Kruegel, Giovanni Vigna, Saurabh Bagchi, and Mathias
+> Payer. 29th USENIX Security Symposium (USENIX Security '20), August 2020.
+
+It has since been developed by the Sandia HALucinator team, with later
+contributions from the GrammaTech HALucinator team and Christopher Wright. The
+complete contributor list is the project's git history.
+
+Sandia National Laboratories is a multimission laboratory managed and operated
+by National Technology & Engineering Solutions of Sandia, LLC, a wholly owned
+subsidiary of Honeywell International Inc., for the U.S. Department of Energy's
+National Nuclear Security Administration under contract DE-NA0003525.
+
+Copyright 2019 National Technology & Engineering Solutions of Sandia, LLC
+(NTESS). Under the terms of Contract DE-NA0003525 with NTESS, the U.S.
+Government retains certain rights in this software.
