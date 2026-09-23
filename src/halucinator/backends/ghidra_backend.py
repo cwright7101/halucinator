@@ -264,6 +264,29 @@ class GhidraBackend(InProcessIrqMixin, ARM32HalMixin, HalBackend):
         "mips":           {"sp": "sp"},   # MIPS has "sp" directly
     }
 
+    # Bits that live inside a packed register rather than in one of their own.
+    # Falcon's $flags carries the ALU flags, the interrupt enables and the
+    # saved enables; the SLEIGH module defines them as bitranges of $flags so
+    # the guest's `bset $flags ie0` and the emulator's view are one piece of
+    # state. Ghidra's getRegister() does not resolve bitrange symbols, so the
+    # mapping has to be repeated here for callers that address them by name.
+    # Positions are envydis's flag-bit table (envydis/falcon.c tabfl).
+    _REGISTER_BITFIELDS: Dict[str, Dict[str, tuple]] = {
+        "falcon": {
+            "Cf": ("flags", 8),   "Of": ("flags", 9),
+            "Sf": ("flags", 10),  "Zf": ("flags", 11),
+            "Ie0": ("flags", 16), "Ie1": ("flags", 17),
+            "Ie2": ("flags", 18),
+            "Is0": ("flags", 20), "Is1": ("flags", 21),
+            "Is2": ("flags", 22),
+            "Ta": ("flags", 24),
+        },
+    }
+    _REGISTER_BITFIELDS["falcon-fuc4"] = _REGISTER_BITFIELDS["falcon"]
+
+    def _bitfield_of(self, name: str):
+        return self._REGISTER_BITFIELDS.get(self.arch, {}).get(name)
+
     def _resolve_register(self, name: str):
         """Ghidra-side register lookup with cross-arch name aliases."""
         alias = self._REGISTER_ALIASES.get(self.arch, {}).get(name)
@@ -300,12 +323,26 @@ class GhidraBackend(InProcessIrqMixin, ARM32HalMixin, HalBackend):
             return False
 
     def read_register(self, register: str) -> int:
+        field = self._bitfield_of(register)
+        if field is not None:
+            container, bit = field
+            return (self.read_register(container) >> bit) & 1
         reg = self._resolve_register(register)
         if reg is None:
             raise ValueError(f"Unknown register: {register!r}")
         return int(self._emulator.readRegister(reg).longValue())
 
     def write_register(self, register: str, value: int) -> None:
+        field = self._bitfield_of(register)
+        if field is not None:
+            container, bit = field
+            packed = self.read_register(container)
+            if int(value) & 1:
+                packed |= (1 << bit)
+            else:
+                packed &= ~(1 << bit)
+            self.write_register(container, packed & 0xFFFFFFFF)
+            return
         reg = self._resolve_register(register)
         if reg is None:
             raise ValueError(f"Unknown register: {register!r}")
@@ -494,7 +531,29 @@ class GhidraBackend(InProcessIrqMixin, ARM32HalMixin, HalBackend):
         if self._emulator is None:
             raise RuntimeError("Call GhidraBackend.init() first")
         from ghidra.util.task import TaskMonitor  # type: ignore
-        self._emulator.step(TaskMonitor.DUMMY)
+        # A failed step leaves PC where it was. Callers that step in a loop
+        # would otherwise spin on the same faulting instruction for the whole
+        # budget and report a plausible-looking "did not finish" -- which is
+        # how an unimplemented pcodeop reads as a slow firmware. Say so once,
+        # with the address, and record it for the caller to test.
+        if not self._emulator.step(TaskMonitor.DUMMY):
+            exec_addr = self._emulator.getExecutionAddress()
+            pc = (int(exec_addr.getUnsignedOffset())
+                  if exec_addr is not None else 0)
+            if not self._maybe_handle_exc_return(pc):
+                if getattr(self, "_step_fault_pc", None) != pc:
+                    self._step_fault_pc = pc
+                    log.error(
+                        "GhidraBackend.step(): stuck at pc=0x%x state=%s err=%r",
+                        pc, str(self._emulator.getEmulateExecutionState()),
+                        str(self._emulator.getLastError() or ""))
+            else:
+                try:
+                    self._emulator.setHalt(False)
+                except Exception:  # noqa: BLE001
+                    pass
+        else:
+            self._step_fault_pc = None
         if getattr(self, "_mmio", None):
             self._sweep_mmio_writes()
             self._tick_peripherals()
