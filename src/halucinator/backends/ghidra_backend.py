@@ -205,6 +205,7 @@ class GhidraBackend(InProcessIrqMixin, ARM32HalMixin, HalBackend):
             block.setExecute(True)
 
         self._emulator = EmulatorHelper(self._program)
+        self._install_mmio_peripherals()
 
         if self.arch in ("cortex-m3", "arm"):
             self._patch_arm_setISAMode()
@@ -494,6 +495,8 @@ class GhidraBackend(InProcessIrqMixin, ARM32HalMixin, HalBackend):
             raise RuntimeError("Call GhidraBackend.init() first")
         from ghidra.util.task import TaskMonitor  # type: ignore
         self._emulator.step(TaskMonitor.DUMMY)
+        if getattr(self, "_mmio", None):
+            self._sweep_mmio_writes()
 
     # ARM-v7M exception-return magic values. When an ISR does `bx lr` with
     # LR = one of these, the hardware normally pops the exception frame.
@@ -747,6 +750,138 @@ class GhidraBackend(InProcessIrqMixin, ARM32HalMixin, HalBackend):
     # ------------------------------------------------------------------
     # ARM-specific: work around a Ghidra EmulatorHelper bug
     # ------------------------------------------------------------------
+
+    # ------------------------------------------------------------------
+    # Emulated MMIO
+    # ------------------------------------------------------------------
+
+    def _install_mmio_peripherals(self) -> None:
+        """Route reads and writes in `emulate:` regions to their peripheral.
+
+        Ghidra's emulator offers no general memory-access callback we can
+        implement from Python -- ``MemoryAccessFilter`` is an abstract class,
+        not an interface -- so reads are caught through the memory fault
+        handler instead: an emulated region is left *uninitialized*, every read
+        of it faults, and the handler answers from the peripheral. Writes have
+        no fault to hook, so they are swept out of the emulator's tracked
+        write set after each step.
+
+        The consequence worth knowing: a peripheral sees each write at the end
+        of the step that made it, not at the instant of the store. For status
+        and mailbox registers that is indistinguishable; for a device that must
+        act *during* an instruction it is not, and that device needs a real
+        callback rather than this.
+        """
+        self._mmio: List[tuple] = []          # (start, end, peripheral)
+        for region in self._regions:
+            per = getattr(region, "emulate", None)
+            if per is None:
+                continue
+            inst = per(region.name, region.base_addr, region.size) if isinstance(per, type) else per
+            # The peripheral must be addressed in its region's space, or a
+            # Harvard target will exchange values with the wrong memory.
+            if getattr(region, "space", None) and not getattr(inst, "space", None):
+                inst.space = region.space
+            self._mmio.append((region.base_addr, region.base_addr + region.size, inst))
+            log.info("GhidraBackend: %s emulated by %s",
+                     region.name, type(inst).__name__)
+        if not self._mmio:
+            return
+        # A peripheral that names its live registers gets them shadowed each
+        # step; one that does not is served by the fault handler alone, which
+        # answers each address once.
+        self._mmio_live = []
+        for start, end, inst in self._mmio:
+            live = getattr(inst, "live_registers", None)
+            if callable(live):
+                live = list(live())
+            if live:
+                self._mmio_live.append((start, inst, list(live), {}))
+                log.info("GhidraBackend: shadowing %d live registers for %s",
+                         len(live), type(inst).__name__)
+        self._install_mmio_fault_handler()
+
+    @staticmethod
+    def _space_of(per) -> Optional[str]:
+        return getattr(per, "space", None)
+
+    def _peripheral_for(self, addr: int):
+        for start, end, inst in getattr(self, "_mmio", ()):
+            if start <= addr < end:
+                return start, inst
+        return None, None
+
+    def _install_mmio_fault_handler(self) -> None:
+        import jpype  # type: ignore
+        from ghidra.pcode.memstate import MemoryFaultHandler  # type: ignore
+        backend = self
+
+        @jpype.JImplements(MemoryFaultHandler)
+        class _MmioFaults:
+            @jpype.JOverride
+            def uninitializedRead(self, address, size, buf, bufOffset):
+                addr = int(address.getOffset())
+                base, per = backend._peripheral_for(addr)
+                if per is None:
+                    return False
+                try:
+                    value = per.hw_read(addr - base, size)
+                except Exception:            # a model bug must not read as a CPU fault
+                    log.exception("GhidraBackend: %s hw_read(0x%x) raised",
+                                  type(per).__name__, addr - base)
+                    return False
+                endian = "big" if backend._language.isBigEndian() else "little"
+                data = int(value & ((1 << (8 * size)) - 1)).to_bytes(size, endian)
+                for i, b in enumerate(data):
+                    buf[bufOffset + i] = jpype.JByte(b - 256 if b > 127 else b)
+                return True
+
+            @jpype.JOverride
+            def unknownAddress(self, address, write):
+                return False
+
+        self._mmio_faults = _MmioFaults()     # keep a reference alive
+        self._emulator.setMemoryFaultHandler(self._mmio_faults)
+
+    def _sweep_mmio_writes(self) -> None:
+        """Exchange values with each emulated peripheral once per step.
+
+        Ghidra's emulator gives us no usable general MMIO callback from
+        Python. ``MemoryAccessFilter`` is an abstract class, not an interface,
+        so JPype cannot implement it and a Java shim cannot see Ghidra's
+        classes from the system classpath. ``MemoryFaultHandler`` fires only
+        for *uninitialized* reads, so it answers each address exactly once and
+        then the value is cached forever -- useless for a status register that
+        has to change. ``getTrackedMemoryWriteSet()`` returns null here.
+
+        So instead of intercepting accesses, we shadow a bounded set of
+        registers the peripheral declares live: after each step, any that
+        changed are reported as writes, and all of them are refreshed from the
+        peripheral. Reads therefore see values that are one step stale, and a
+        register the peripheral does not declare is ordinary memory.
+        """
+        for base, per, live, shadow in getattr(self, "_mmio_live", ()):
+            for off in live:
+                addr = base + off
+                try:
+                    cur = self.read_memory(addr, 4, 1, space=self._space_of(per))
+                except Exception:
+                    continue
+                if shadow.get(off) is not None and cur != shadow[off]:
+                    try:
+                        per.hw_write(off, 4, cur)
+                    except Exception:
+                        log.exception("GhidraBackend: %s hw_write(0x%x) raised",
+                                      type(per).__name__, off)
+                try:
+                    fresh = per.hw_read(off, 4) & 0xFFFFFFFF
+                except Exception:
+                    log.exception("GhidraBackend: %s hw_read(0x%x) raised",
+                                  type(per).__name__, off)
+                    continue
+                if fresh != cur:
+                    self.write_memory(addr, 4, fresh, space=self._space_of(per))
+                shadow[off] = fresh
 
     def _patch_arm_setISAMode(self) -> None:
         """Replace ARM's built-in setISAMode pcode-op handler with a no-op.
