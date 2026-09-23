@@ -497,6 +497,8 @@ class GhidraBackend(InProcessIrqMixin, ARM32HalMixin, HalBackend):
         self._emulator.step(TaskMonitor.DUMMY)
         if getattr(self, "_mmio", None):
             self._sweep_mmio_writes()
+            self._tick_peripherals()
+            self._deliver_peripheral_irq()
 
     # ARM-v7M exception-return magic values. When an ISR does `bx lr` with
     # LR = one of these, the hardware normally pops the exception frame.
@@ -882,6 +884,64 @@ class GhidraBackend(InProcessIrqMixin, ARM32HalMixin, HalBackend):
                 if fresh != cur:
                     self.write_memory(addr, 4, fresh, space=self._space_of(per))
                 shadow[off] = fresh
+
+    def _tick_peripherals(self, steps: int = 1) -> None:
+        """Advance any peripheral that models time.
+
+        A peripheral with a `tick` gets one call per emulated instruction. The
+        unit mismatch is the peripheral's to resolve -- hardware timers count
+        clock cycles and this counts instructions.
+        """
+        for _base, per, _live, _shadow in getattr(self, "_mmio_live", ()):
+            tick = getattr(per, "tick", None)
+            if callable(tick):
+                try:
+                    tick(steps)
+                except Exception:
+                    log.exception("GhidraBackend: %s tick() raised",
+                                  type(per).__name__)
+
+    def _deliver_peripheral_irq(self) -> bool:
+        """Take an interrupt a peripheral has raised, if the CPU will have it.
+
+        Opt-in (`auto_deliver_peripheral_irqs`), because a backend whose
+        dispatch loop already owns IRQ delivery should not have entries
+        synthesised underneath it.
+
+        No acknowledgement is issued here, and that is deliberate rather than
+        an omission: the architecture gates re-entry itself. Delivery requires
+        the enable bit, entry clears it, and only the handler's return restores
+        it -- so a line that stays pending cannot re-enter until the firmware
+        is ready for it. Acking on the firmware's behalf would hide a handler
+        that never does.
+        """
+        if not getattr(self, "auto_deliver_peripheral_irqs", False):
+            return False
+        deliverer = getattr(self, "_peripheral_deliverer", None)
+        if deliverer is None:
+            from .irq.delivery import build_exception_deliverer
+            deliverer = build_exception_deliverer(self.arch)
+            self._peripheral_deliverer = deliverer
+            if deliverer is None:
+                log.warning("GhidraBackend: no exception deliverer for %s; "
+                            "peripheral IRQs cannot be taken", self.arch)
+                self.auto_deliver_peripheral_irqs = False
+                return False
+        for _base, per, _live, _shadow in getattr(self, "_mmio_live", ()):
+            pending = getattr(per, "pending_and_enabled", None)
+            if not callable(pending):
+                continue
+            bits = pending()
+            if not bits:
+                continue
+            num = (bits & -bits).bit_length() - 1      # lowest-numbered line
+            plan = getattr(self, "peripheral_irq_plan", None)
+            if plan is None:
+                from .irq.delivery import DeliveryPlan
+                plan = DeliveryPlan()
+            if deliverer.deliver(self, num, plan):
+                return True
+        return False
 
     def _patch_arm_setISAMode(self) -> None:
         """Replace ARM's built-in setISAMode pcode-op handler with a no-op.

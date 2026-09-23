@@ -125,3 +125,115 @@ def test_vector_one_respects_its_own_enable():
     be = FakeBackend(Ie0=1, Ie1=0, iv0=0x0100, iv1=0x0200)
     plan = DeliveryPlan(falcon_vector=1)
     assert build_exception_deliverer("falcon").deliver(be, 9, plan) is False
+
+
+# -- autonomous, peripheral-driven delivery -------------------------------
+#
+# The loop these pin is: a peripheral raises its own line as emulated time
+# passes, and the backend takes the interrupt without a harness poking one in.
+# Only the two backend methods are exercised, bound onto FakeBackend, so the
+# test does not need a Ghidra installation to run.
+
+from halucinator.peripheral_models.falcon_engine import (
+    FalconEngine, INTR_CLEAR, INTR_EN_SET, PERIODIC_ENABLE, PERIODIC_PERIOD,
+    PERIODIC_TIME,
+)
+
+
+class IrqBackend(FakeBackend):
+    """FakeBackend plus the real tick/deliver methods under test."""
+
+    arch = "falcon"
+
+    def __init__(self, engine, **kw):
+        super().__init__(**kw)
+        self._mmio = True
+        self._mmio_live = [(0x0, engine, {}, {})]
+        self.auto_deliver_peripheral_irqs = True
+        self.peripheral_irq_plan = DeliveryPlan(falcon_vector=0,
+                                                stack_space="dmem")
+
+    def _space_of(self, per):
+        return "io"
+
+    from halucinator.backends.ghidra_backend import GhidraBackend
+    _tick_peripherals = GhidraBackend._tick_peripherals
+    _deliver_peripheral_irq = GhidraBackend._deliver_peripheral_irq
+    del GhidraBackend
+
+
+def _armed_engine(period=100):
+    eng = FalconEngine("eng", 0x0, 0x20000)
+    eng.hw_write(PERIODIC_PERIOD, 4, period)
+    eng.hw_write(PERIODIC_TIME, 4, period)
+    eng.hw_write(PERIODIC_ENABLE, 4, 1)
+    eng.hw_write(INTR_EN_SET, 4, 1 << 0)
+    return eng
+
+
+def _run(backend, steps, ack=True):
+    """Run `steps` instructions, standing in for the handler on each entry.
+
+    A real Falcon handler acknowledges its line (INTR_CLEAR) and returns
+    (`ret`, which restores Ie0). `ack=False` models a handler that only
+    returns -- see the re-entry test below for why that is worth separating.
+    """
+    eng = backend._mmio_live[0][1]
+    taken = 0
+    for _ in range(steps):
+        backend._tick_peripherals()
+        if backend._deliver_peripheral_irq():
+            taken += 1
+            if ack:
+                eng.hw_write(INTR_CLEAR, 4, 1 << 0)
+            backend.regs["Ie0"] = 1      # stand in for the handler's `ret`
+    return taken
+
+
+def test_the_timer_drives_delivery_with_no_harness_trigger():
+    """One entry per expiry, with nothing but emulated time driving it."""
+    eng = _armed_engine(100)
+    be = IrqBackend(eng, Ie0=1, iv0=0x500)
+    assert _run(be, 1000) == 10
+    assert eng.timer_ticks == 10                         # entries == expiries
+    assert be.regs["pc"] == 0x500
+
+
+def test_a_handler_that_never_acks_keeps_re_entering():
+    """The backend does not ack on the firmware's behalf, so a handler that
+    forgets to is visible as repeated entry rather than hidden."""
+    be = IrqBackend(_armed_engine(100), Ie0=1, iv0=0x500)
+    assert _run(be, 1000, ack=False) > 10
+
+
+def test_nothing_is_delivered_before_the_timer_expires():
+    be = IrqBackend(_armed_engine(100), Ie0=1, iv0=0x500)
+    assert _run(be, 99) == 0
+    assert be.regs["pc"] == 0x1000                       # never entered
+
+
+def test_delivery_is_opt_in():
+    be = IrqBackend(_armed_engine(10), Ie0=1, iv0=0x500)
+    be.auto_deliver_peripheral_irqs = False
+    assert _run(be, 1000) == 0
+
+
+def test_a_disabled_line_is_raised_but_not_taken():
+    """The control for the test above: same timer, enable bit clear."""
+    eng = _armed_engine(10)
+    eng.hw_write(0x00500, 4, 1 << 0)                     # INTR_EN_CLEAR
+    be = IrqBackend(eng, Ie0=1, iv0=0x500)
+    assert _run(be, 1000) == 0
+    assert eng.intr & 1                                  # raised all the same
+
+
+def test_a_still_pending_line_cannot_re_enter_until_the_handler_returns():
+    """Entry clears Ie0; without the `ret` that restores it, no second entry."""
+    eng = _armed_engine(10)
+    be = IrqBackend(eng, Ie0=1, iv0=0x500)
+    taken = 0
+    for _ in range(1000):
+        be._tick_peripherals()
+        if be._deliver_peripheral_irq():
+            taken += 1                                   # no Ie0 restore here
+    assert taken == 1

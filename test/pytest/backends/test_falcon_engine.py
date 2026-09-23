@@ -5,7 +5,9 @@ import pytest
 
 from halucinator.peripheral_models.falcon_engine import (
     DEFAULT_READY_BITS, ENGINE_STATUS, FalconEngine, INTR, INTR_CLEAR,
-    INTR_EN, INTR_EN_CLEAR, INTR_EN_SET, INTR_SET, MAILBOX_REQ, MAILBOX_RESP,
+    INTR_EN, INTR_EN_CLEAR, INTR_EN_SET, INTR_SET, LINE_PERIODIC,
+    LINE_WATCHDOG, MAILBOX_REQ, MAILBOX_RESP, PERIODIC_ENABLE,
+    PERIODIC_PERIOD, PERIODIC_TIME, TIME_LOW, WATCHDOG_ENABLE, WATCHDOG_TIME,
 )
 
 
@@ -91,3 +93,75 @@ def test_request_register_reads_back_not_busy(eng):
     """The microcode polls bit 31 of the request register for "not busy"."""
     eng.hw_write(MAILBOX_REQ, 4, 0x122234)
     assert eng.hw_read(MAILBOX_REQ, 4) & (1 << 31) == 0
+
+
+# -- timers ---------------------------------------------------------------
+
+def _arm_periodic(eng, period):
+    eng.hw_write(PERIODIC_PERIOD, 4, period)
+    eng.hw_write(PERIODIC_TIME, 4, period)
+    eng.hw_write(PERIODIC_ENABLE, 4, 1)
+
+
+def test_periodic_timer_does_not_fire_early(eng):
+    _arm_periodic(eng, 100)
+    eng.tick(99)
+    assert eng.hw_read(INTR, 4) == 0
+
+
+def test_periodic_timer_fires_on_reaching_zero(eng):
+    """timer.rst: "When PERIODIC_TIME reaches 0, an interrupt is generated on
+    line 0 and the counter is reset to PERIODIC_PERIOD"."""
+    _arm_periodic(eng, 100)
+    eng.tick(100)
+    assert eng.hw_read(INTR, 4) == 1 << LINE_PERIODIC
+    assert eng.hw_read(PERIODIC_TIME, 4) == 100          # reloaded
+
+
+def test_periodic_timer_keeps_firing(eng):
+    _arm_periodic(eng, 100)
+    eng.tick(1000)
+    assert eng.timer_ticks == 10
+
+
+def test_periodic_timer_is_inert_when_disabled(eng):
+    _arm_periodic(eng, 100)
+    eng.hw_write(PERIODIC_ENABLE, 4, 0)
+    eng.tick(1000)
+    assert eng.hw_read(INTR, 4) == 0
+    assert eng.hw_read(PERIODIC_TIME, 4) == 100          # counter frozen
+
+
+def test_a_zero_period_does_not_spin(eng):
+    """A period of 0 must not loop forever inside one tick()."""
+    eng.hw_write(PERIODIC_PERIOD, 4, 0)
+    eng.hw_write(PERIODIC_TIME, 4, 0)
+    eng.hw_write(PERIODIC_ENABLE, 4, 1)
+    eng.tick(10)                                          # must return
+    assert eng.hw_read(INTR, 4) == 1 << LINE_PERIODIC
+
+
+def test_watchdog_is_one_shot_and_disables_itself(eng):
+    eng.hw_write(WATCHDOG_TIME, 4, 50)
+    eng.hw_write(WATCHDOG_ENABLE, 4, 1)
+    eng.tick(50)
+    assert eng.hw_read(INTR, 4) == 1 << LINE_WATCHDOG
+    assert eng.hw_read(WATCHDOG_ENABLE, 4) == 0
+    eng.hw_write(INTR_CLEAR, 4, 1 << LINE_WATCHDOG)
+    eng.tick(1000)
+    assert eng.hw_read(INTR, 4) == 0                      # never fires again
+
+
+def test_time_advances_and_is_read_only(eng):
+    eng.tick(1200)
+    assert eng.hw_read(TIME_LOW, 4) == 1200
+    eng.hw_write(TIME_LOW, 4, 0)
+    assert eng.hw_read(TIME_LOW, 4) == 1200
+
+
+def test_timer_line_only_counts_as_pending_when_enabled(eng):
+    _arm_periodic(eng, 10)
+    eng.tick(10)
+    assert eng.pending_and_enabled() == 0                  # raised, not enabled
+    eng.hw_write(INTR_EN_SET, 4, 1 << LINE_PERIODIC)
+    assert eng.pending_and_enabled() == 1 << LINE_PERIODIC

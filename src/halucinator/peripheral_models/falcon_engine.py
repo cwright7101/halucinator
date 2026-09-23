@@ -27,6 +27,14 @@ loop of the shape ``iord`` / ``and`` or ``shr`` / branch-back states the value
 needed to leave it. For GP102 FECS and GPCCS both, that is bits 0x40, 0x80 and
 0x4000 of ``I[0x10000]``, and both images agree independently.
 
+**Timers** (``timer.rst``) -- the periodic timer counts ``PERIODIC_TIME`` down
+while ``PERIODIC_ENABLE`` bit 0 is set, raises line 0 at zero and reloads from
+``PERIODIC_PERIOD``; the watchdog is the one-shot equivalent on line 1. These
+are what let the model raise an interrupt on its own rather than waiting for a
+harness to poke one in. Note the unit: hardware counts *clock cycles* and a
+rehost steps *instructions*, so ``cycles_per_step`` scales between them and is
+a modelling choice, not a hardware fact.
+
 **Indirect-register mailbox** -- the microcode reaches registers outside its own
 I/O window through a request/response pair, per its access helper::
 
@@ -51,6 +59,13 @@ log = logging.getLogger(__name__)
 INTR_SET, INTR_CLEAR, INTR = 0x00000, 0x00100, 0x00200
 INTR_EN_SET, INTR_EN_CLEAR, INTR_EN = 0x00400, 0x00500, 0x00600
 
+# Timers (docs/hw/falcon/timer.rst)
+PERIODIC_PERIOD, PERIODIC_TIME, PERIODIC_ENABLE = 0x00800, 0x00900, 0x00A00
+TIME_LOW, TIME_HIGH = 0x00B00, 0x00C00
+WATCHDOG_TIME, WATCHDOG_ENABLE = 0x00D00, 0x00E00
+
+LINE_PERIODIC, LINE_WATCHDOG = 0, 1
+
 # Engine status, and the mailbox pair
 ENGINE_STATUS = 0x10000
 MAILBOX_REQ, MAILBOX_RESP = 0x1CA00, 0x1CB00
@@ -73,6 +88,7 @@ class FalconEngine(AvatarPeripheral):
                  registers: Optional[Dict[int, int]] = None,
                  ready_bits: int = DEFAULT_READY_BITS,
                  level_lines: int = 0,
+                 cycles_per_step: int = 1,
                  **kwargs: Any) -> None:
         AvatarPeripheral.__init__(self, name, address, size)
         self.registers: Dict[int, int] = dict(registers or {})
@@ -84,6 +100,16 @@ class FalconEngine(AvatarPeripheral):
         self.intr = 0
         self.intr_en = 0
         self._pending_req = 0
+        # Hardware counts clock cycles; a rehost steps instructions. This is
+        # the conversion, and it is a choice rather than a measurement.
+        self.cycles_per_step = cycles_per_step
+        self.periodic_period = 0
+        self.periodic_time = 0
+        self.periodic_enable = 0
+        self.watchdog_time = 0
+        self.watchdog_enable = 0
+        self.time = 0
+        self.timer_ticks = 0
         self.read_handler[0:size] = self.hw_read
         self.write_handler[0:size] = self.hw_write
         log.info("%s: Falcon engine MMIO at 0x%08x (+0x%x), %d modelled "
@@ -97,7 +123,53 @@ class FalconEngine(AvatarPeripheral):
         microcode actually polls or drives.
         """
         return (INTR, INTR_EN, ENGINE_STATUS, MAILBOX_REQ, MAILBOX_RESP,
-                INTR_SET, INTR_CLEAR, INTR_EN_SET, INTR_EN_CLEAR)
+                INTR_SET, INTR_CLEAR, INTR_EN_SET, INTR_EN_CLEAR,
+                PERIODIC_PERIOD, PERIODIC_TIME, PERIODIC_ENABLE,
+                WATCHDOG_TIME, WATCHDOG_ENABLE, TIME_LOW, TIME_HIGH)
+
+    # -- timers ------------------------------------------------------------
+
+    def tick(self, steps: int = 1) -> None:
+        """Advance the timers, raising their lines when they expire.
+
+        timer.rst: PERIODIC_TIME decreases by 1 each cycle while enabled; at 0
+        it raises line 0 and reloads from PERIODIC_PERIOD. The watchdog is the
+        same but one-shot, on line 1, and disables itself when it fires.
+        """
+        cycles = steps * self.cycles_per_step
+        self.time += cycles
+
+        if self.periodic_enable & 1:
+            remaining = cycles
+            fired = 0
+            while remaining > 0:
+                if self.periodic_time == 0:
+                    # Nothing left to count: reload and take the tick. Guard
+                    # against a zero period, which would otherwise spin here.
+                    self.periodic_time = self.periodic_period
+                    if self.periodic_time == 0:
+                        self.raise_line(LINE_PERIODIC)
+                        self.timer_ticks += 1
+                        break
+                step = min(remaining, self.periodic_time)
+                self.periodic_time -= step
+                remaining -= step
+                if self.periodic_time == 0:
+                    # Expiry is on *reaching* zero, per timer.rst.
+                    self.raise_line(LINE_PERIODIC)
+                    self.timer_ticks += 1
+                    fired += 1
+                    self.periodic_time = self.periodic_period
+                    if self.periodic_period == 0 or fired > cycles:
+                        break
+
+        if self.watchdog_enable & 1:
+            if self.watchdog_time <= cycles:
+                self.watchdog_time = 0
+                self.watchdog_enable = 0        # one-shot
+                self.raise_line(LINE_WATCHDOG)
+            else:
+                self.watchdog_time -= cycles
 
     # -- interrupt lines ---------------------------------------------------
 
@@ -122,6 +194,20 @@ class FalconEngine(AvatarPeripheral):
             return self.ready_bits
         if offset == MAILBOX_REQ:
             return 0                      # busy bit clear: the request is done
+        if offset == PERIODIC_PERIOD:
+            return self.periodic_period
+        if offset == PERIODIC_TIME:
+            return self.periodic_time
+        if offset == PERIODIC_ENABLE:
+            return self.periodic_enable
+        if offset == WATCHDOG_TIME:
+            return self.watchdog_time
+        if offset == WATCHDOG_ENABLE:
+            return self.watchdog_enable
+        if offset == TIME_LOW:
+            return self.time & 0xFFFFFFFF
+        if offset == TIME_HIGH:
+            return (self.time >> 32) & 0xFFFFFFFF
         if offset == MAILBOX_RESP:
             val = self.registers.get(self._pending_req, 0)
             log.debug("%s: mailbox read 0x%06x -> 0x%08x",
@@ -144,6 +230,19 @@ class FalconEngine(AvatarPeripheral):
             self.intr_en |= value
         elif offset == INTR_EN_CLEAR:
             self.intr_en &= ~value
+        elif offset == PERIODIC_PERIOD:
+            self.periodic_period = value
+        elif offset == PERIODIC_TIME:
+            self.periodic_time = value
+        elif offset == PERIODIC_ENABLE:
+            self.periodic_enable = value
+        elif offset == WATCHDOG_TIME:
+            self.watchdog_time = value
+        elif offset == WATCHDOG_ENABLE:
+            self.watchdog_enable = value
+        elif offset in (TIME_LOW, TIME_HIGH):
+            log.debug("%s: ignoring write to read-only %s",
+                      self.name, "TIME_LOW" if offset == TIME_LOW else "TIME_HIGH")
         elif offset == MAILBOX_REQ:
             self._pending_req = value & REQ_ADDR_MASK
             log.debug("%s: mailbox request 0x%06x (raw 0x%08x)",
